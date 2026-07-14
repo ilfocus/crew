@@ -1,0 +1,12 @@
+# crew_core/pubspec.yaml
+name: crew_core
+description: Crew generation engine — assemble expert agents onto code directories.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: ^3.5.0
+dependencies:
+  yaml: ^3.1.2
+  path: ^1.9.0
+dev_dependencies:
+  test: ^1.25.0

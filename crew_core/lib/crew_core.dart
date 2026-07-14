@@ -1,0 +1,26 @@
+// crew_core/lib/crew_core.dart
+library crew_core;
+// exports added per task
+export 'src/models/repo.dart';
+export 'src/models/agent_spec.dart';
+export 'src/models/agent_template.dart';
+export 'src/models/agent.dart';
+export 'src/models/crew_config.dart';
+export 'src/models/file_artifact.dart';
+export 'src/models/team_profile.dart';
+export 'src/models/generation_result.dart';
+export 'src/templates/builtin_templates.dart';
+export 'src/analysis/repo_analyzer.dart';
+export 'src/runner/runner.dart';
+export 'src/runner/fake_runner.dart';
+export 'src/runner/probe_parser.dart';
+export 'src/adapters/agent_body.dart';
+export 'src/adapters/output_adapter.dart';
+export 'src/adapters/claude_adapter.dart';
+export 'src/adapters/codex_adapter.dart';
+export 'src/adapters/memory_adapter.dart';
+export 'src/adapters/docs_adapter.dart';
+export 'src/adapters/mcp_adapter.dart';
+export 'src/engine/write_planner.dart';
+export 'src/engine/generation_pipeline.dart';
+export 'src/runner/cli_runner.dart';
