@@ -14,7 +14,19 @@ GenerationPipeline buildPipeline(
   Runner? runner,
 }) {
   return GenerationPipeline(
-    runner: runner ?? CliRunner(tool: 'claude'),
+    runner: runner ?? _runnerFor(config),
     adapters: adaptersFor(config.targets.toSet()),
+    resolve: resolve,
   );
+}
+
+Runner _runnerFor(CrewConfig config) {
+  switch (config.runner) {
+    case 'cli':
+      return CliRunner(tool: config.cliTool);
+    case 'api':
+      throw UnsupportedError('ApiRunner 尚未实现（runner: api）');
+    default:
+      throw UnsupportedError('未知 runner：${config.runner}');
+  }
 }

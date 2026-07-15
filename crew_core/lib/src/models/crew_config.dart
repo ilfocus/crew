@@ -10,6 +10,9 @@ class CrewConfig {
   final List<Repo> repos;
   final List<String> targets;
   final String runner;
+
+  /// 生成期用哪个本地 CLI 探查代码（`claude` | `codex`）。仅当 runner == 'cli' 时有意义。
+  final String cliTool;
   final List<Agent> agents;
 
   const CrewConfig({
@@ -19,6 +22,7 @@ class CrewConfig {
     required this.repos,
     required this.targets,
     required this.runner,
+    this.cliTool = 'claude',
     required this.agents,
   });
 
@@ -33,6 +37,7 @@ class CrewConfig {
     }
     b.writeln('targets: [${targets.join(', ')}]');
     b.writeln('runner: $runner');
+    b.writeln('cliTool: $cliTool');
     b.writeln('agents:');
     for (final a in agents) {
       b.writeln('  - name: ${a.name}');
@@ -55,7 +60,8 @@ class CrewConfig {
           .map((e) => e.toString())
           .toList(),
       runner: doc['runner'] as String,
-      agents: (doc['agents'] as YamlList)
+      cliTool: (doc['cliTool'] as String?) ?? 'claude',
+      agents: (doc['agents'] as YamlList? ?? const [])
           .map((e) => Agent.fromJson(e as YamlMap))
           .toList(),
     );

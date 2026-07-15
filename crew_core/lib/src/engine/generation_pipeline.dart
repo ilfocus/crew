@@ -18,13 +18,19 @@ class GenerationPipeline {
   final RepoAnalyzer analyzer;
   final WritePlanner planner;
 
+  /// 模板解析器：把 agent 的 `templateRef` 解析成 [AgentTemplate]。
+  /// 默认只认内置库；GUI/CLI 传入包含自定义模板的 resolver。
+  final AgentTemplate? Function(String ref) resolveTemplate;
+
   GenerationPipeline({
     required this.runner,
     required this.adapters,
     RepoAnalyzer? analyzer,
     WritePlanner? planner,
+    AgentTemplate? Function(String ref)? resolve,
   })  : analyzer = analyzer ?? RepoAnalyzer(),
-        planner = planner ?? WritePlanner();
+        planner = planner ?? WritePlanner(),
+        resolveTemplate = resolve ?? templateByRef;
 
   Future<List<AssignmentCandidate>> analyze(CrewConfig config) async {
     return analyzer.suggest(
@@ -38,7 +44,7 @@ class GenerationPipeline {
     AgentTemplate? Function(String ref)? resolve,
   }) async {
     final allPaths = config.repos.map((r) => r.path).toList();
-    final resolver = resolve ?? templateByRef;
+    final resolver = resolve ?? resolveTemplate;
     final specs = <AgentSpec>[];
     for (final agent in config.agents) {
       final template = resolver(agent.templateRef);

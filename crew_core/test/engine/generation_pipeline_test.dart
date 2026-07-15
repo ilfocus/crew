@@ -42,6 +42,29 @@ void main() {
     expect(File('${root.path}/crew.yaml').readAsStringSync(), contains('name: apm'));
   });
 
+  test('generate resolves custom templates via the pipeline resolver', () async {
+    const custom = AgentTemplate(
+      id: 'data-eng', version: 1, defaultName: 'data', displayName: '小数',
+      role: '数据工程师', probePrompt: 'probe', matchGlobs: [],
+    );
+    final runner = FakeRunner((dir, t) => '{"role":"${t.role}"}');
+    // 管线携带一个能解析自定义 ref 的 resolver（内置库并不认识 data-eng@1）。
+    final pipeline = GenerationPipeline(
+      runner: runner,
+      adapters: const [],
+      resolve: (ref) => ref == custom.ref ? custom : templateByRef(ref),
+    );
+    final config = CrewConfig(
+      version: 1, name: 'x', createdAt: '2026-07-13',
+      repos: const [Repo('~/data')], targets: const ['claude'], runner: 'cli',
+      agents: const [Agent(name: 'data', templateRef: 'data-eng@1', repos: ['~/data'])],
+    );
+
+    final result = await pipeline.generate(config);
+    expect(result.specs.single.role, '数据工程师');
+    expect(result.specs.single.displayName, '小数');
+  });
+
   test('analyze returns assignment candidates for the repos', () async {
     final root = Directory.systemTemp.createTempSync('ws2');
     addTearDown(() => root.deleteSync(recursive: true));

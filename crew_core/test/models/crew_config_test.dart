@@ -31,4 +31,21 @@ void main() {
   test('toYaml emits a version header', () {
     expect(config.toYaml(), contains('version: 1'));
   });
+
+  test('cliTool defaults to claude and round-trips through yaml', () {
+    expect(config.cliTool, 'claude');
+    final codex = CrewConfig(
+      version: 1, name: 'apm', createdAt: '2026-07-13',
+      repos: const [Repo('~/x')], targets: const ['codex'],
+      runner: 'cli', cliTool: 'codex', agents: const [],
+    );
+    expect(codex.toYaml(), contains('cliTool: codex'));
+    expect(CrewConfig.fromYaml(codex.toYaml()).cliTool, 'codex');
+  });
+
+  test('fromYaml defaults cliTool to claude when absent (back-compat)', () {
+    const legacy = 'version: 1\nname: apm\ncreatedAt: 2026-07-13\n'
+        'repos:\n  - path: ~/x\ntargets: [claude]\nrunner: cli\nagents:\n';
+    expect(CrewConfig.fromYaml(legacy).cliTool, 'claude');
+  });
 }

@@ -96,6 +96,7 @@ class WizardController extends ChangeNotifier {
       repos: directories.map((d) => Repo(d)).toList(),
       targets: targets.toList()..sort(),
       runner: runner,
+      cliTool: cliTool,
       agents: agents,
     );
   }
