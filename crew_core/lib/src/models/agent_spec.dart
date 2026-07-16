@@ -98,6 +98,47 @@ class AgentSpec {
     );
   }
 
+  /// copyWith：P2 专家池 merge 也会用；全字段可选，不传则保留原值。
+  AgentSpec copyWith({
+    String? name,
+    String? displayName,
+    List<String>? repos,
+    String? role,
+    String? coordinates,
+    String? moduleStructure,
+    List<KeyFile>? keyFiles,
+    String? dataflow,
+    String? memoryConvention,
+    List<String>? conventions,
+    String? personality,
+    List<String>? principles,
+    List<String>? techStack,
+    List<String>? sdks,
+    List<String>? difficulties,
+    String? source,
+    String? github,
+  }) {
+    return AgentSpec(
+      name: name ?? this.name,
+      displayName: displayName ?? this.displayName,
+      repos: repos ?? this.repos,
+      role: role ?? this.role,
+      coordinates: coordinates ?? this.coordinates,
+      moduleStructure: moduleStructure ?? this.moduleStructure,
+      keyFiles: keyFiles ?? this.keyFiles,
+      dataflow: dataflow ?? this.dataflow,
+      memoryConvention: memoryConvention ?? this.memoryConvention,
+      conventions: conventions ?? this.conventions,
+      personality: personality ?? this.personality,
+      principles: principles ?? this.principles,
+      techStack: techStack ?? this.techStack,
+      sdks: sdks ?? this.sdks,
+      difficulties: difficulties ?? this.difficulties,
+      source: source ?? this.source,
+      github: github ?? this.github,
+    );
+  }
+
   factory AgentSpec.fromProbeJson(
     Map<String, dynamic> json, {
     required String name,

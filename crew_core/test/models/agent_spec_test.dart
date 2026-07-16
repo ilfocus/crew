@@ -156,4 +156,38 @@ void main() {
     expect(restored.path, 'foo.swift:42');
     expect(restored.purpose, '入口');
   });
+
+  // --- copyWith ---
+  test('copyWith changes only specified fields, keeps rest unchanged', () {
+    const original = AgentSpec(
+      name: 'ios', displayName: '小i', repos: ['~/r'],
+      role: 'iOS', coordinates: 'coord', moduleStructure: 'mod',
+      keyFiles: [KeyFile('a.swift', '入口')], dataflow: 'flow',
+      memoryConvention: 'conv', conventions: ['c1'],
+      personality: '严谨', principles: ['p1'],
+      techStack: ['Swift'], sdks: ['SDK'],
+      difficulties: ['d1'], source: 'opensource', github: 'url',
+    );
+    final copied = original.copyWith(personality: '活泼', principles: ['new']);
+    expect(copied.personality, '活泼');
+    expect(copied.principles, ['new']);
+    // 其余不变
+    expect(copied.name, 'ios');
+    expect(copied.role, 'iOS');
+    expect(copied.techStack, ['Swift']);
+    expect(copied.source, 'opensource');
+  });
+
+  test('copyWith with no args returns equivalent copy', () {
+    const original = AgentSpec(
+      name: 'x', displayName: 'X', repos: [], role: 'r',
+      coordinates: '', moduleStructure: '', keyFiles: [], dataflow: '',
+      memoryConvention: '', conventions: [],
+      personality: 'p', principles: ['p1'],
+    );
+    final copied = original.copyWith();
+    expect(copied.name, original.name);
+    expect(copied.personality, original.personality);
+    expect(copied.principles, original.principles);
+  });
 }

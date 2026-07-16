@@ -20,4 +20,21 @@ void main() {
       expect(t.probePrompt.trim(), isNotEmpty, reason: t.id);
     }
   });
+
+  // --- 新增：探查 prompt 请求能力维度 ---
+  test('every probePrompt requests techStack, sdks, difficulties', () {
+    for (final t in kBuiltinTemplates) {
+      expect(t.probePrompt, contains('techStack'), reason: '${t.id} should request techStack');
+      expect(t.probePrompt, contains('sdks'), reason: '${t.id} should request sdks');
+      expect(t.probePrompt, contains('difficulties'), reason: '${t.id} should request difficulties');
+    }
+  });
+
+  // --- 新增：内置模板有人设 ---
+  test('every builtin template has non-empty personality and principles', () {
+    for (final t in kBuiltinTemplates) {
+      expect(t.personality, isNotEmpty, reason: '${t.id} personality');
+      expect(t.principles, isNotEmpty, reason: '${t.id} principles');
+    }
+  });
 }

@@ -45,4 +45,31 @@ class RepoAnalyzer {
     }
     return out;
   }
+
+  /// 读取 repo 的 `.git/config` 获取 remote origin URL（纯文件读取，不起子进程）。
+  /// 返回 null 表示无 git remote 或文件不存在。
+  String? gitRemoteUrl(String repoPath) {
+    final config = File('${p.join(repoPath, '.git', 'config')}');
+    if (!config.existsSync()) return null;
+    final lines = config.readAsLinesSync();
+    var inOrigin = false;
+    for (final line in lines) {
+      if (line.trim() == '[remote "origin"]') {
+        inOrigin = true;
+        continue;
+      }
+      if (inOrigin) {
+        if (line.startsWith('[')) {
+          inOrigin = false;
+          continue;
+        }
+        final trimmed = line.trim();
+        if (trimmed.startsWith('url =') || trimmed.startsWith('url=')) {
+          final eq = trimmed.indexOf('=');
+          if (eq >= 0) return trimmed.substring(eq + 1).trim();
+        }
+      }
+    }
+    return null;
+  }
 }

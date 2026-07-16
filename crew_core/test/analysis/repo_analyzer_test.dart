@@ -38,4 +38,36 @@ void main() {
     final candidates = RepoAnalyzer().suggest(kBuiltinTemplates, [empty.path]);
     expect(candidates.where((c) => c.repoPath == empty.path), isEmpty);
   });
+
+  test('gitRemoteUrl parses origin URL from .git/config', () {
+    final repo = Directory.systemTemp.createTempSync('git_repo');
+    addTearDown(() => repo.deleteSync(recursive: true));
+    final gitDir = Directory('${repo.path}/.git');
+    gitDir.createSync();
+    File('${gitDir.path}/config').writeAsStringSync(
+      '[core]\n'
+      '\trepositoryformatversion = 0\n'
+      '[remote "origin"]\n'
+      '\turl = https://github.com/foo/bar.git\n'
+      '\tfetch = +refs/heads/*:refs/remotes/origin/*\n'
+      '[branch "main"]\n'
+      '\tremote = origin\n'
+      '\tmerge = refs/heads/main\n');
+    expect(RepoAnalyzer().gitRemoteUrl(repo.path), 'https://github.com/foo/bar.git');
+  });
+
+  test('gitRemoteUrl returns null when no .git/config', () {
+    final repo = Directory.systemTemp.createTempSync('no_git');
+    addTearDown(() => repo.deleteSync(recursive: true));
+    expect(RepoAnalyzer().gitRemoteUrl(repo.path), isNull);
+  });
+
+  test('gitRemoteUrl returns null when no remote origin', () {
+    final repo = Directory.systemTemp.createTempSync('no_remote');
+    addTearDown(() => repo.deleteSync(recursive: true));
+    final gitDir = Directory('${repo.path}/.git');
+    gitDir.createSync();
+    File('${gitDir.path}/config').writeAsStringSync('[core]\n\tbare = false\n');
+    expect(RepoAnalyzer().gitRemoteUrl(repo.path), isNull);
+  });
 }

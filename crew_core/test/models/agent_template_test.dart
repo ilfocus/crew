@@ -22,4 +22,32 @@ void main() {
     expect(pm.isAllRepos, isTrue);
     expect(ios.isAllRepos, isFalse);
   });
+
+  // --- 新增：人设字段 ---
+  test('AgentTemplate has personality and principles with defaults', () {
+    const t = AgentTemplate(
+      id: 'x', version: 1, defaultName: 'x', displayName: 'X',
+      role: 'r', probePrompt: 'p', matchGlobs: [],
+    );
+    expect(t.personality, '');
+    expect(t.principles, isEmpty);
+  });
+
+  test('AgentTemplate constructed with personality and principles', () {
+    const t = AgentTemplate(
+      id: 'x', version: 1, defaultName: 'x', displayName: 'X',
+      role: 'r', probePrompt: 'p', matchGlobs: [],
+      personality: '严谨',
+      principles: ['不引入未测试依赖', '主线程不做 IO'],
+    );
+    expect(t.personality, '严谨');
+    expect(t.principles, ['不引入未测试依赖', '主线程不做 IO']);
+  });
+
+  test('all builtin templates have non-empty personality and principles', () {
+    for (final t in kBuiltinTemplates) {
+      expect(t.personality, isNotEmpty, reason: '${t.id} personality should be non-empty');
+      expect(t.principles, isNotEmpty, reason: '${t.id} principles should be non-empty');
+    }
+  });
 }

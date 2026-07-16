@@ -66,6 +66,10 @@ class GenerationPipeline {
         name: agent.name,
         displayName: template.displayName,
         repos: repos,
+      ).copyWith(
+        personality: template.personality.isNotEmpty ? template.personality : null,
+        principles: template.principles.isNotEmpty ? template.principles : null,
+        github: _resolveGithub(repos),
       ));
     }
     return specs;
@@ -73,6 +77,15 @@ class GenerationPipeline {
 
   TeamProfile synthesize(CrewConfig config, List<AgentSpec> specs) =>
       TeamProfile(name: config.name, members: specs);
+
+  /// 从 repos 中探测第一个有 git remote 的仓库 URL。
+  String? _resolveGithub(List<String> repos) {
+    for (final r in repos) {
+      final url = analyzer.gitRemoteUrl(r);
+      if (url != null) return url;
+    }
+    return null;
+  }
 
   Future<GenerationResult> generate(
     CrewConfig config, {

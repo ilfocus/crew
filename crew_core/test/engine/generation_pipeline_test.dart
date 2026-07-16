@@ -18,9 +18,10 @@ void main() {
     final iosPath = '${root.path}/ios';
     Directory(iosPath).createSync();
 
-    // FakeRunner 按 template.role 返回一份合法探查 JSON。
+    // FakeRunner 按 template.role 返回一份合法探查 JSON（含能力维度字段）。
     final runner = FakeRunner((dir, t) =>
-        '{"role":"${t.role}","coordinates":"路径 $dir","moduleStructure":"Core/","keyFiles":[],"dataflow":"","memoryConvention":"","conventions":[]}');
+        '{"role":"${t.role}","coordinates":"路径 $dir","moduleStructure":"Core/","keyFiles":[],"dataflow":"","memoryConvention":"","conventions":[],'
+        '"techStack":["Swift","SwiftUI"],"sdks":["SensorsSDK"],"difficulties":["启动耗时"]}');
 
     final pipeline = GenerationPipeline(
       runner: runner,
@@ -79,5 +80,75 @@ void main() {
         agents: const []),
     );
     expect(candidates.any((c) => c.templateId == 'ios-dev'), isTrue);
+  });
+
+  test('generate injects template personality + probe capabilities into spec', () async {
+    final root = Directory.systemTemp.createTempSync('ws_inject');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final iosPath = '${root.path}/ios';
+    Directory(iosPath).createSync();
+
+    // FakeRunner 返回含能力维度的探查 JSON
+    final runner = FakeRunner((dir, t) =>
+        '{"role":"${t.role}","coordinates":"","moduleStructure":"","keyFiles":[],'
+        '"dataflow":"","memoryConvention":"","conventions":[],'
+        '"techStack":["Swift","SwiftUI"],"sdks":["SensorsSDK"],"difficulties":["线程安全"]}');
+
+    final pipeline = GenerationPipeline(
+      runner: runner,
+      adapters: const [],
+    );
+
+    final config = CrewConfig(
+      version: 1, name: 'apm', createdAt: '2026-07-13',
+      repos: [Repo(iosPath)], targets: const ['claude'], runner: 'cli',
+      agents: [
+        Agent(name: 'ios', templateRef: 'ios-dev@1', repos: [iosPath]),
+      ],
+    );
+
+    final result = await pipeline.generate(config);
+    final spec = result.specs.single;
+
+    // 模板人设（来自 AgentTemplate 预设）
+    expect(spec.personality, '严谨、重性能与体验，偏保守不冒进');
+    expect(spec.principles, contains('主线程不做阻塞 IO'));
+
+    // 探查能力（来自 probe JSON）
+    expect(spec.techStack, ['Swift', 'SwiftUI']);
+    expect(spec.sdks, ['SensorsSDK']);
+    expect(spec.difficulties, ['线程安全']);
+
+    // 渲染后正文含对应 section
+    final body = renderAgentBody(spec);
+    expect(body, contains('## 人格'));
+    expect(body, contains('## 判断标准'));
+    expect(body, contains('## 技术栈'));
+    expect(body, contains('## SDK / 三方库'));
+    expect(body, contains('## 重难点'));
+  });
+
+  test('generate with empty-personality template does not override probe values', () async {
+    const custom = AgentTemplate(
+      id: 'plain', version: 1, defaultName: 'plain', displayName: '小P',
+      role: '通用', probePrompt: 'probe', matchGlobs: [],
+      // personality 和 principles 留空
+    );
+    final runner = FakeRunner((dir, t) =>
+        '{"role":"r","personality":"来自probe","principles":["probe原则"]}');
+    final pipeline = GenerationPipeline(
+      runner: runner,
+      adapters: const [],
+      resolve: (ref) => ref == custom.ref ? custom : templateByRef(ref),
+    );
+    final config = CrewConfig(
+      version: 1, name: 'x', createdAt: '2026-07-13',
+      repos: const [Repo('~/r')], targets: const ['claude'], runner: 'cli',
+      agents: const [Agent(name: 'plain', templateRef: 'plain@1', repos: ['~/r'])],
+    );
+    final result = await pipeline.generate(config);
+    // 模板人设为空 → 保留 probe 返回的值
+    expect(result.specs.single.personality, '来自probe');
+    expect(result.specs.single.principles, ['probe原则']);
   });
 }
