@@ -90,8 +90,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(capturedRole, 'iOS 开发工程师');
     expect(capturedInstruction, '更关注 SwiftUI');
+    // probePrompt 字段位于长列表下方，向下滚动使其构建
+    await tester.drag(find.byType(ListView), const Offset(0, -800));
+    await tester.pumpAndSettle();
     // probePrompt 已被替换
-    expect(find.text('优化后的 prompt'), findsOneWidget);
+    final probePromptField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '探查 prompt...',
+    );
+    expect(
+      tester.widget<TextField>(probePromptField).controller?.text,
+      '优化后的 prompt',
+    );
   });
 
   testWidgets('new expert button creates custom template', (tester) async {
@@ -113,5 +122,63 @@ void main() {
     await tester.pumpAndSettle();
     // 列表中出现新专家
     expect(find.text('小R（Rust 工程师）'), findsOneWidget);
+  });
+
+  testWidgets('new expert saves personality and principles', (tester) async {
+    final repo = _newRepo();
+    await tester.pumpWidget(CrewApp(
+      home: ExpertsPage(templates: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('新建专家'));
+    await tester.pumpAndSettle();
+    // 基本信息字段
+    await tester.enterText(find.byType(TextField).at(0), 'perf-dev');
+    await tester.enterText(find.byType(TextField).at(1), 'perf');
+    await tester.enterText(find.byType(TextField).at(2), '小P');
+    await tester.enterText(find.byType(TextField).at(3), '性能工程师');
+    // 人格与判断标准（按 labelText 定位）
+    final personalityField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == '人格',
+    );
+    final principlesField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == '判断标准',
+    );
+    await tester.enterText(personalityField, '严谨、重性能');
+    await tester.enterText(principlesField, '主线程不做 IO, 依赖锁版本');
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+    // 仓库中已持久化正确值
+    final saved = repo.resolve('perf-dev@1');
+    expect(saved, isNotNull);
+    expect(saved!.personality, '严谨、重性能');
+    expect(saved.principles, ['主线程不做 IO', '依赖锁版本']);
+  });
+
+  testWidgets('edit page shows personality and principles initial values',
+      (tester) async {
+    final repo = _newRepo();
+    await tester.pumpWidget(CrewApp(
+      home: ExpertsPage(templates: repo),
+    ));
+    await tester.pumpAndSettle();
+    // 打开 ios-dev（内置，含 personality/principles）
+    await tester.tap(find.text('小i（iOS 开发工程师）'));
+    await tester.pumpAndSettle();
+    final original = kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev');
+    final personalityField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == '人格',
+    );
+    final principlesField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == '判断标准',
+    );
+    expect(
+      tester.widget<TextField>(personalityField).controller?.text,
+      original.personality,
+    );
+    expect(
+      tester.widget<TextField>(principlesField).controller?.text,
+      original.principles.join(', '),
+    );
   });
 }

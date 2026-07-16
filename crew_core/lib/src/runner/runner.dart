@@ -14,4 +14,9 @@ abstract class Runner {
     required String prompt,
     required AgentTemplate template,
   });
+
+  /// Distill a project's L1 memory into L2 domain abstraction.
+  /// Returns rawOutput expected to contain a JSON object of shape:
+  ///   { "domainNotes": String, "playbooks": [{ "path": String, "content": String }] }
+  Future<RunnerResult> distill({required String prompt});
 }

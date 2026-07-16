@@ -11,6 +11,8 @@ Map<String, dynamic> agentTemplateToJson(AgentTemplate t) => {
       'role': t.role,
       'probePrompt': t.probePrompt,
       'matchGlobs': t.matchGlobs,
+      'personality': t.personality,
+      'principles': t.principles,
     };
 
 AgentTemplate agentTemplateFromJson(Map<String, dynamic> j) => AgentTemplate(
@@ -22,6 +24,11 @@ AgentTemplate agentTemplateFromJson(Map<String, dynamic> j) => AgentTemplate(
       probePrompt: j['probePrompt'] as String,
       matchGlobs:
           (j['matchGlobs'] as List).map((e) => e.toString()).toList(),
+      personality: (j['personality'] as String?) ?? '',
+      principles: (j['principles'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
     );
 
 class TemplateRepository {
@@ -83,6 +90,8 @@ class TemplateRepository {
       role: t.role,
       probePrompt: t.probePrompt,
       matchGlobs: List.from(t.matchGlobs),
+      personality: t.personality,
+      principles: List.from(t.principles),
     );
   }
 

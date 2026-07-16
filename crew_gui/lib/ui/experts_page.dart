@@ -146,6 +146,8 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
   late TextEditingController _matchGlobsCtrl;
   late TextEditingController _idCtrl;
   late TextEditingController _defaultNameCtrl;
+  late TextEditingController _personalityCtrl;
+  late TextEditingController _principlesCtrl;
 
   bool get _isCustomEditable => !widget.isBuiltinOriginal || widget.isNew;
 
@@ -159,6 +161,8 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
     _matchGlobsCtrl = TextEditingController(text: t.matchGlobs.join(', '));
     _idCtrl = TextEditingController(text: t.id);
     _defaultNameCtrl = TextEditingController(text: t.defaultName);
+    _personalityCtrl = TextEditingController(text: t.personality);
+    _principlesCtrl = TextEditingController(text: t.principles.join(', '));
   }
 
   @override
@@ -169,6 +173,8 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
     _matchGlobsCtrl.dispose();
     _idCtrl.dispose();
     _defaultNameCtrl.dispose();
+    _personalityCtrl.dispose();
+    _principlesCtrl.dispose();
     super.dispose();
   }
 
@@ -182,6 +188,12 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
       probePrompt: _probePromptCtrl.text,
       matchGlobs: _matchGlobsCtrl.text
           .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList(),
+      personality: _personalityCtrl.text.trim(),
+      principles: _principlesCtrl.text
+          .split(RegExp(r'[,\n]'))
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList(),
@@ -370,6 +382,29 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 24),
+
+          // 人格与判断标准
+          _SectionTitle('人格与判断标准'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _personalityCtrl,
+            decoration: const InputDecoration(
+              labelText: '人格',
+              border: OutlineInputBorder(),
+              hintText: '严谨、重性能',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _principlesCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: '判断标准',
+              border: OutlineInputBorder(),
+              hintText: '逗号或换行分隔，如：主线程不做 IO, 依赖锁版本',
+            ),
           ),
           const SizedBox(height: 24),
 

@@ -51,4 +51,9 @@ class CliRunner implements Runner {
     final res = await _run(tool, _args(prompt), workingDirectory: workingDir);
     return RunnerResult(res.stdout, res.exitCode);
   }
+
+  @override
+  Future<RunnerResult> distill({required String prompt}) {
+    throw UnimplementedError('CliRunner.distill is not implemented yet');
+  }
 }

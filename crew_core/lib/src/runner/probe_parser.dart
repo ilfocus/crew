@@ -9,7 +9,7 @@ AgentSpec parseProbe(
   required String displayName,
   required List<String> repos,
 }) {
-  final jsonText = _extractFirstJsonObject(rawOutput);
+  final jsonText = extractFirstJsonObject(rawOutput);
   if (jsonText == null) {
     throw FormatException('probe 输出中未找到 JSON 对象', rawOutput);
   }
@@ -22,7 +22,9 @@ AgentSpec parseProbe(
   );
 }
 
-String? _extractFirstJsonObject(String s) {
+/// 从原始字符串中抽取第一个平衡花括号的 JSON 对象文本。
+/// 找不到时返回 null。可处理被散文 / ```json 包裹的输出。
+String? extractFirstJsonObject(String s) {
   final start = s.indexOf('{');
   if (start < 0) return null;
   var depth = 0;

@@ -96,4 +96,39 @@ void main() {
     expect(clone.probePrompt, original.probePrompt);
     expect(identical(clone, original), isFalse);
   });
+
+  test('personality and principles round-trip through json', () {
+    const t = AgentTemplate(
+      id: 'rust', version: 1, defaultName: 'rust', displayName: '小R',
+      role: 'Rust 工程师', probePrompt: '探查 rust',
+      matchGlobs: ['Cargo.toml', '*.rs'],
+      personality: '严谨、重性能',
+      principles: ['主线程不做 IO', '依赖锁版本'],
+    );
+    final json = agentTemplateToJson(t);
+    final back = agentTemplateFromJson(json);
+    expect(back.personality, '严谨、重性能');
+    expect(back.principles, ['主线程不做 IO', '依赖锁版本']);
+  });
+
+  test('fromJson without personality/principles is backward compatible', () {
+    final j = <String, dynamic>{
+      'id': 'legacy', 'version': 1, 'defaultName': 'legacy',
+      'displayName': '旧', 'role': '旧角色', 'probePrompt': 'p',
+      'matchGlobs': <String>['*.txt'],
+    };
+    final t = agentTemplateFromJson(j);
+    expect(t.personality, '');
+    expect(t.principles, isEmpty);
+  });
+
+  test('cloneBuiltin preserves personality and principles', () {
+    final repo = TemplateRepository(File('${dir.path}/clone.json'));
+    final original = kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev');
+    final clone = repo.cloneBuiltin(original);
+    expect(clone.personality, original.personality);
+    expect(clone.principles, original.principles);
+    // 独立副本，互不影响
+    expect(identical(clone.principles, original.principles), isFalse);
+  });
 }
