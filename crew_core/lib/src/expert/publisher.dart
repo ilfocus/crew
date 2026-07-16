@@ -2,6 +2,7 @@
 import '../models/agent_spec.dart';
 import '../models/expert.dart';
 import 'project_id.dart';
+import 'redact.dart';
 
 /// 把 workspace 中 probe 出的 [AgentSpec] + L1 [ExpertMemory]
 /// 发布成一个 [Expert]（kind = project）。
@@ -44,9 +45,11 @@ Expert? publishProject({
     );
     final redactedMemory = ExpertMemory(
       index: workspaceMemory.index,
-      notes: workspaceMemory.notes,
+      notes: redactPaths(workspaceMemory.notes),
       solved: const <MemoryEntry>[], // L1 specifics removed
-      playbooks: workspaceMemory.playbooks, // already abstract
+      playbooks: workspaceMemory.playbooks
+          .map((p) => MemoryEntry(p.path, redactPaths(p.content)))
+          .toList(),
       projects: const <ProjectRef>[],
     );
     return Expert(

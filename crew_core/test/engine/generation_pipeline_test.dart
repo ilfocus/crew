@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:crew_core/crew_core.dart';
 import 'package:test/test.dart';
@@ -150,5 +151,63 @@ void main() {
     // 模板人设为空 → 保留 probe 返回的值
     expect(result.specs.single.personality, '来自probe');
     expect(result.specs.single.principles, ['probe原则']);
+  });
+
+  test('renderAll persists .crew/specs/<name>.json per agent (round-trips via fromJson)', () async {
+    final root = Directory.systemTemp.createTempSync('ws_specs');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final iosPath = '${root.path}/ios';
+    Directory(iosPath).createSync();
+
+    final runner = FakeRunner((dir, t) =>
+        '{"role":"${t.role}","coordinates":"路径 $dir","moduleStructure":"Core/",'
+        '"keyFiles":[{"path":"Core/App.swift","purpose":"入口"}],'
+        '"dataflow":"采集 → 上报","memoryConvention":"开工读 MEMORY",'
+        '"conventions":["develop 分支工作"],'
+        '"techStack":["Swift"],"sdks":["SensorsSDK"],"difficulties":["线程安全"]}');
+
+    final pipeline = GenerationPipeline(
+      runner: runner,
+      adapters: [ClaudeAdapter()],
+    );
+
+    final config = _config(iosPath);
+    final result = await pipeline.generate(config);
+    final arts = pipeline.renderAll(result);
+
+    // 每个 agent 都有一份 `.crew/specs/<name>.json`，isMemory=false
+    for (final spec in result.specs) {
+      final rel = '.crew/specs/${spec.name}.json';
+      final matches = arts.where((a) => a.relativePath == rel).toList();
+      expect(matches.length, 1, reason: 'expected one artifact for $rel');
+      final art = matches.single;
+      expect(art.isMemory, isFalse,
+          reason: 'spec JSON must be overwritable on regen (isMemory=false)');
+
+      // 反向解码后字段等价
+      final decoded =
+          AgentSpec.fromJson(jsonDecode(art.content) as Map<String, dynamic>);
+      expect(decoded.name, spec.name);
+      expect(decoded.displayName, spec.displayName);
+      expect(decoded.role, spec.role);
+      expect(decoded.coordinates, spec.coordinates);
+      expect(decoded.moduleStructure, spec.moduleStructure);
+      expect(decoded.dataflow, spec.dataflow);
+      expect(decoded.memoryConvention, spec.memoryConvention);
+      expect(decoded.conventions, spec.conventions);
+      expect(decoded.personality, spec.personality);
+      expect(decoded.principles, spec.principles);
+      expect(decoded.techStack, spec.techStack);
+      expect(decoded.sdks, spec.sdks);
+      expect(decoded.difficulties, spec.difficulties);
+      expect(decoded.source, spec.source);
+      expect(decoded.github, spec.github);
+      expect(decoded.repos, spec.repos);
+      expect(decoded.keyFiles.length, spec.keyFiles.length);
+      for (var i = 0; i < decoded.keyFiles.length; i++) {
+        expect(decoded.keyFiles[i].path, spec.keyFiles[i].path);
+        expect(decoded.keyFiles[i].purpose, spec.keyFiles[i].purpose);
+      }
+    }
   });
 }

@@ -2,11 +2,13 @@
 import 'package:crew_core/crew_core.dart';
 import 'package:flutter/material.dart';
 import 'services/directory_picker.dart';
+import 'services/expert_pool_service.dart';
 import 'services/project_store.dart';
 import 'services/template_repository.dart';
 import 'services/workspace_opener.dart';
 import 'state/generation_controller.dart';
 import 'state/wizard_controller.dart';
+import 'ui/expert_pool_page.dart';
 import 'ui/experts_page.dart';
 import 'ui/home_page.dart';
 import 'ui/wizard/wizard_page.dart';
@@ -18,6 +20,7 @@ class AppScaffold extends StatefulWidget {
   final WorkspaceOpener opener;
   final GenerationController Function() generationFactory;
   final String cliTool;
+  final ExpertPoolService? expertPoolService;
   const AppScaffold({
     super.key,
     required this.store,
@@ -26,18 +29,27 @@ class AppScaffold extends StatefulWidget {
     required this.opener,
     required this.generationFactory,
     this.cliTool = 'claude',
+    this.expertPoolService,
   });
 
   @override
   State<AppScaffold> createState() => _AppScaffoldState();
 }
 
-enum _NavTab { newProject, experts, projects }
+enum _NavTab { newProject, experts, projects, pool }
 
 class _AppScaffoldState extends State<AppScaffold> {
   _NavTab _tab = _NavTab.projects;
   WizardController? _wizard;
   GenerationController? _generation;
+  late final ExpertPoolService _poolService;
+
+  @override
+  void initState() {
+    super.initState();
+    _poolService =
+        widget.expertPoolService ?? ExpertPoolService.defaultForTool(widget.cliTool);
+  }
 
   void _startNew() {
     setState(() {
@@ -101,7 +113,10 @@ class _AppScaffoldState extends State<AppScaffold> {
           store: widget.store,
           onNew: _startNew,
           onOpen: (e) => widget.opener.openFolder(e.path),
+          expertPoolService: _poolService,
         );
+      case _NavTab.pool:
+        return ExpertPoolPage(service: _poolService);
     }
   }
 
@@ -157,6 +172,12 @@ class _AppScaffoldState extends State<AppScaffold> {
                   label: '项目',
                   selected: _tab == _NavTab.projects,
                   onTap: () => setState(() => _tab = _NavTab.projects),
+                ),
+                _SidebarItem(
+                  icon: Icons.pool_outlined,
+                  label: '专家池',
+                  selected: _tab == _NavTab.pool,
+                  onTap: () => setState(() => _tab = _NavTab.pool),
                 ),
               ],
             ),

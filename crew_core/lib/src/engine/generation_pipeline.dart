@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../analysis/repo_analyzer.dart';
 import '../models/agent.dart';
 import '../models/agent_spec.dart';
@@ -103,6 +105,14 @@ class GenerationPipeline {
     final arts = <FileArtifact>[];
     for (final a in adapters) {
       arts.addAll(a.render(result));
+    }
+    // 持久化每个 agent 的中性 spec JSON，供 WorkspaceReader 反向读回。
+    for (final spec in result.specs) {
+      arts.add(FileArtifact(
+        '.crew/specs/${spec.name}.json',
+        jsonEncode(spec.toJson()),
+        isMemory: false,
+      ));
     }
     arts.add(FileArtifact('crew.yaml', result.config.toYaml()));
     return arts;

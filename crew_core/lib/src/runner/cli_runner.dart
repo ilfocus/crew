@@ -53,7 +53,8 @@ class CliRunner implements Runner {
   }
 
   @override
-  Future<RunnerResult> distill({required String prompt}) {
-    throw UnimplementedError('CliRunner.distill is not implemented yet');
+  Future<RunnerResult> distill({required String prompt}) async {
+    final res = await _run(tool, _args(prompt));
+    return RunnerResult(res.stdout, res.exitCode);
   }
 }

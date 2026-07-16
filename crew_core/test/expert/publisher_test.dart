@@ -24,9 +24,9 @@ AgentSpec _fullSpec() => const AgentSpec(
 
 ExpertMemory _fullMemory() => const ExpertMemory(
       index: '# MEMORY',
-      notes: 'L1 notes',
+      notes: 'L1 notes with /Users/bm/app/ios path',
       solved: [MemoryEntry('solved/x.md', 'fix X at Core/Foo.swift:42')],
-      playbooks: [MemoryEntry('playbooks/y.md', 'play Y')],
+      playbooks: [MemoryEntry('playbooks/y.md', 'use foo/bar.dart:12 carefully')],
     );
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
 
       // memory preserved entirely
       expect(expert.memory.index, '# MEMORY');
-      expect(expert.memory.notes, 'L1 notes');
+      expect(expert.memory.notes, 'L1 notes with /Users/bm/app/ios path');
       expect(expert.memory.solved.length, 1);
       expect(expert.memory.solved.first.path, 'solved/x.md');
       expect(expert.memory.playbooks.length, 1);
@@ -152,8 +152,52 @@ void main() {
       expect(expert.memory.playbooks.length, 1);
       expect(expert.memory.playbooks.first.path, 'playbooks/y.md');
 
-      // notes kept (role + techStack, no specific paths typically)
-      expect(expert.memory.notes, 'L1 notes');
+      // notes redacted for experience-only
+      expect(expert.memory.notes, 'L1 notes with ‹path› path');
+    });
+
+    test('redacts paths in notes and playbooks for experience-only', () {
+      final expert = publishProject(
+        spec: _fullSpec(),
+        workspaceMemory: _fullMemory(),
+        retention: 'experience-only',
+        source: 'opensource',
+        gitRemoteUrl: 'https://github.com/foo/bar',
+        workspacePath: '/workspace/ios',
+        version: 2,
+      );
+
+      expect(expert, isNotNull);
+
+      // notes: /Users/bm/app/ios should be redacted
+      expect(expert!.memory.notes.contains('/Users/bm/app/ios'), isFalse);
+      expect(expert.memory.notes.contains('‹path›'), isTrue);
+
+      // playbooks: foo/bar.dart:12 should be redacted
+      expect(expert.memory.playbooks.length, 1);
+      expect(
+          expert.memory.playbooks.first.content.contains('foo/bar.dart:12'),
+          isFalse);
+      expect(expert.memory.playbooks.first.content.contains('‹path›'), isTrue);
+      // playbook path (filename) preserved
+      expect(expert.memory.playbooks.first.path, 'playbooks/y.md');
+    });
+
+    test('full retention preserves paths in notes and playbooks', () {
+      final expert = publishProject(
+        spec: _fullSpec(),
+        workspaceMemory: _fullMemory(),
+        retention: 'full',
+        source: 'private',
+        workspacePath: '/workspace/ios',
+        version: 1,
+      );
+
+      expect(expert, isNotNull);
+      // full retention — no redaction
+      expect(expert!.memory.notes.contains('/Users/bm/app/ios'), isTrue);
+      expect(expert.memory.playbooks.first.content.contains('foo/bar.dart:12'),
+          isTrue);
     });
   });
 
