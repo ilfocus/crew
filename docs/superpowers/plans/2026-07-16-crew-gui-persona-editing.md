@@ -35,14 +35,14 @@
 **Interfaces:**
 - Produces: `agentTemplateToJson`/`agentTemplateFromJson` 往返包含 `personality`(String)/`principles`(List<String>)；`cloneBuiltin` 拷贝这两字段。
 
-- [ ] **Step 1: 先写测试（红）**
+- [x] **Step 1: 先写测试（红）**
   - 往返：构造带 `personality`/`principles` 的 `AgentTemplate` → `agentTemplateToJson` → `agentTemplateFromJson`，断言两字段无损。
   - 兼容：`agentTemplateFromJson({...无 personality/principles...})` 不抛异常，取默认（`''`/空）。
   - 克隆：`cloneBuiltin(内置模板)` 保留 `personality`/`principles`。
-- [ ] **Step 2:** `agentTemplateToJson` 加 `'personality': t.personality, 'principles': t.principles`。
-- [ ] **Step 3:** `agentTemplateFromJson` 加解析：`personality: (j['personality'] as String?) ?? ''`、`principles: (j['principles'] as List?)?.map((e)=>e.toString()).toList() ?? const []`。
-- [ ] **Step 4:** `cloneBuiltin` 补 `personality: t.personality, principles: List.from(t.principles)`。
-- [ ] **Step 5:** `cd crew_gui && flutter test test/services/template_repository_test.dart` 通过；全量 `flutter test` 全绿。Commit。
+- [x] **Step 2:** `agentTemplateToJson` 加 `'personality': t.personality, 'principles': t.principles`。
+- [x] **Step 3:** `agentTemplateFromJson` 加解析：`personality: (j['personality'] as String?) ?? ''`、`principles: (j['principles'] as List?)?.map((e)=>e.toString()).toList() ?? const []`。
+- [x] **Step 4:** `cloneBuiltin` 补 `personality: t.personality, principles: List.from(t.principles)`。
+- [x] **Step 5:** `cd crew_gui && flutter test test/services/template_repository_test.dart` 通过；全量 `flutter test` 全绿。Commit。
 
 **Acceptance:**
 - 序列化往返含人设；旧 JSON 无字段可读（默认值）；`cloneBuiltin` 不丢人设。
@@ -58,17 +58,17 @@
 **Interfaces:**
 - Produces: `ExpertEditPage` 新增"人格"单行输入与"判断标准"输入（逗号或换行分隔的列表）；`_buildFromForm` 把两者写入 `AgentTemplate`；保存后经 `updateCustom` 持久化。
 
-- [ ] **Step 1: 先写测试（红）**（widget test）
+- [x] **Step 1: 先写测试（红）**（widget test）
   - 打开 `ExpertEditPage`（新建自定义），在人格框输入文本、判断标准框输入 `a, b`，点保存 → 断言 `repository` 里对应模板的 `personality` == 输入、`principles` == `['a','b']`。
   - 打开一个带人设的模板 → 断言两个输入框回显初始值。
-- [ ] **Step 2:** `_ExpertEditPageState` 加 `_personalityCtrl`、`_principlesCtrl`，`initState` 用 `t.personality` / `t.principles.join(', ')` 初始化，`dispose` 释放。
-- [ ] **Step 3:** 在 build 里"基本信息"之后加一个 `_SectionTitle('人格与判断标准')` 分区：
+- [x] **Step 2:** `_ExpertEditPageState` 加 `_personalityCtrl`、`_principlesCtrl`，`initState` 用 `t.personality` / `t.principles.join(', ')` 初始化，`dispose` 释放。
+- [x] **Step 3:** 在 build 里"基本信息"之后加一个 `_SectionTitle('人格与判断标准')` 分区：
   - 人格：单行 `TextField`（`_personalityCtrl`，hint 如 `严谨、重性能`）。
   - 判断标准：多行 `TextField`（`_principlesCtrl`，hint `逗号或换行分隔，如：主线程不做 IO, 依赖锁版本`）。
-- [ ] **Step 4:** `_buildFromForm` 加：
+- [x] **Step 4:** `_buildFromForm` 加：
   - `personality: _personalityCtrl.text.trim()`
   - `principles: _principlesCtrl.text.split(RegExp(r'[,\n]')).map((s)=>s.trim()).where((s)=>s.isNotEmpty).toList()`
-- [ ] **Step 5:** `flutter test test/ui/experts_page_test.dart` 通过；全量 `flutter test` 全绿。Commit。
+- [x] **Step 5:** `flutter test test/ui/experts_page_test.dart` 通过；全量 `flutter test` 全绿。Commit。
 
 **Acceptance:**
 - 编辑页可填/回显人格与判断标准；保存后持久化正确（往返到 `TemplateRepository`）。
@@ -90,3 +90,15 @@
 4. 边界合规：仅动 `crew_gui`；旧自定义模板文件仍可读。
 
 验收通过后，Claude 勾选任务并记录结论。
+
+---
+
+## 验收结论（Claude，2026-07-16）
+
+**通过 ✅** —— 提交 `fd740aa`。`cd crew_gui && flutter test` = **46 passed, 0 skipped**。
+
+| 验收项 | 结论 |
+|--------|------|
+| Task 1 序列化+克隆 | ✅ `template_repository_test`：`personality/principles round-trip through json`、`fromJson without personality/principles is backward compatible`、`cloneBuiltin preserves personality and principles` 三例全过 |
+| Task 2 编辑页 | ✅ `experts_page_test`：`edit page shows personality and principles initial values`（回显）+ 新建保存持久化用例通过 |
+| 边界合规 | ✅ 仅动 `crew_gui`（`template_repository.dart` +9、`experts_page.dart` +35）；旧 JSON 兼容 |
