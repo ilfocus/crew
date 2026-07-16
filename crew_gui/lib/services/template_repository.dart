@@ -30,7 +30,6 @@ class TemplateRepository {
   TemplateRepository(this.customFile);
 
   Future<void> loadCustom() async {
-    // 同步 IO：与 ProjectStore 同因（widget 测试假时钟下 async IO 不完成）。
     _custom.clear();
     if (!customFile.existsSync()) return;
     final list = jsonDecode(customFile.readAsStringSync()) as List;
@@ -39,10 +38,55 @@ class TemplateRepository {
     );
   }
 
-  List<AgentTemplate> get all => [...kBuiltinTemplates, ..._custom];
+  /// 所有模板：自定义覆盖同名内置，其余内置 + 自定义
+  List<AgentTemplate> get all {
+    final customIds = _custom.map((t) => t.id).toSet();
+    return [
+      ...kBuiltinTemplates.where((t) => !customIds.contains(t.id)),
+      ..._custom,
+    ];
+  }
+
+  /// 是否为内置模板（未被自定义覆盖）
+  bool isBuiltin(AgentTemplate t) =>
+      kBuiltinTemplates.any((b) => b.id == t.id && b.ref == t.ref) &&
+      !_custom.any((c) => c.id == t.id);
 
   Future<void> addCustom(AgentTemplate t) async {
     _custom.add(t);
+    _persist();
+  }
+
+  /// 更新已有自定义模板（按 id+version 匹配）
+  Future<void> updateCustom(AgentTemplate t) async {
+    final idx = _custom.indexWhere((c) => c.id == t.id && c.version == t.version);
+    if (idx >= 0) {
+      _custom[idx] = t;
+    } else {
+      _custom.add(t);
+    }
+    _persist();
+  }
+
+  Future<void> removeCustom(String id) async {
+    _custom.removeWhere((c) => c.id == id);
+    _persist();
+  }
+
+  /// 将内置模板复制为自定义（可编辑的覆盖版本）
+  AgentTemplate cloneBuiltin(AgentTemplate t) {
+    return AgentTemplate(
+      id: t.id,
+      version: t.version,
+      defaultName: t.defaultName,
+      displayName: t.displayName,
+      role: t.role,
+      probePrompt: t.probePrompt,
+      matchGlobs: List.from(t.matchGlobs),
+    );
+  }
+
+  void _persist() {
     customFile.parent.createSync(recursive: true);
     customFile.writeAsStringSync(
       const JsonEncoder.withIndent('  ')

@@ -48,4 +48,33 @@ void main() {
     final config = c.buildConfig(createdAt: '2026-07-13');
     expect(config.agents.single.repos, [iosDir.path]);
   });
+
+  test('skipAssign sets all agents to <all> and allows proceeding', () {
+    final c = WizardController();
+    c.addDirectory(iosDir.path);
+    c.setProjectName('apm');
+    c.toggleTemplate(kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev'));
+    c.toggleTemplate(kBuiltinTemplates.firstWhere((t) => t.id == 'pm'));
+    c.skipAssign();
+    expect(c.assignSkipped, isTrue);
+    // 所有 agent 都变成 <all>，AI 会在生成时自行分析分配
+    expect(c.assignments['ios'], [kAllRepos]);
+    expect(c.assignments['pm'], [kAllRepos]);
+
+    final config = c.buildConfig(createdAt: '2026-07-13');
+    final ios = config.agents.firstWhere((a) => a.name == 'ios');
+    expect(ios.repos, [kAllRepos]);
+    expect(ios.isAllRepos, isTrue);
+  });
+
+  test('setAssignment after skip clears the skip flag', () {
+    final c = WizardController();
+    c.addDirectory(iosDir.path);
+    c.toggleTemplate(kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev'));
+    c.skipAssign();
+    expect(c.assignSkipped, isTrue);
+    c.setAssignment('ios', [iosDir.path]);
+    expect(c.assignSkipped, isFalse);
+    expect(c.assignments['ios'], [iosDir.path]);
+  });
 }

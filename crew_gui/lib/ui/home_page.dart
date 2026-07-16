@@ -30,7 +30,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Crew')),
+      appBar: AppBar(title: const Text('项目')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onNew,
         icon: const Icon(Icons.add),

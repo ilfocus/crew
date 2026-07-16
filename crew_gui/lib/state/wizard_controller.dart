@@ -47,10 +47,12 @@ class WizardController extends ChangeNotifier {
   final Map<String, List<String>> assignments = {};
   String projectName = '';
   String workspaceParent = '';
+  bool assignSkipped = false;
 
   bool _isPm(AgentTemplate t) => t.id == 'pm';
 
   void autoAssign() {
+    assignSkipped = false;
     final candidates = analyzer.suggest(selectedTemplates, directories);
     for (final t in selectedTemplates) {
       final name = agentNameFor(t);
@@ -65,7 +67,17 @@ class WizardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void skipAssign() {
+    assignSkipped = true;
+    for (final t in selectedTemplates) {
+      final name = agentNameFor(t);
+      assignments[name] = [kAllRepos];
+    }
+    notifyListeners();
+  }
+
   void setAssignment(String agentName, List<String> repos) {
+    assignSkipped = false;
     assignments[agentName] = repos;
     notifyListeners();
   }
@@ -128,6 +140,7 @@ class WizardController extends ChangeNotifier {
       case WizardStep.agents:
         return selectedTemplates.isNotEmpty;
       case WizardStep.assign:
+        if (assignSkipped) return true;
         return selectedTemplates
             .where((t) => !_isPm(t))
             .every((t) => (assignments[agentNameFor(t)] ?? const []).isNotEmpty);

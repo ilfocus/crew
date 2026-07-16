@@ -37,4 +37,63 @@ void main() {
     await repo.loadCustom();
     expect(repo.resolve('ios-dev@1')?.defaultName, 'ios');
   });
+
+  test('updateCustom overrides builtin by id', () async {
+    final repo = TemplateRepository(File('${dir.path}/custom.json'));
+    await repo.loadCustom();
+    final original = kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev');
+    expect(repo.isBuiltin(original), isTrue);
+
+    final edited = AgentTemplate(
+      id: 'ios-dev', version: 1, defaultName: 'ios', displayName: '小i改',
+      role: '资深 iOS 工程师', probePrompt: '新 prompt',
+      matchGlobs: ['*.swift', 'Podfile'],
+    );
+    await repo.updateCustom(edited);
+
+    // 内置被覆盖
+    expect(repo.isBuiltin(original), isFalse);
+    final resolved = repo.resolve('ios-dev@1')!;
+    expect(resolved.displayName, '小i改');
+    expect(resolved.probePrompt, '新 prompt');
+  });
+
+  test('removeCustom restores builtin', () async {
+    final repo = TemplateRepository(File('${dir.path}/custom.json'));
+    await repo.loadCustom();
+    final original = kBuiltinTemplates.firstWhere((t) => t.id == 'ios-dev');
+
+    await repo.updateCustom(AgentTemplate(
+      id: 'ios-dev', version: 1, defaultName: 'ios', displayName: '临时',
+      role: 'iOS', probePrompt: 'tmp', matchGlobs: [],
+    ));
+    expect(repo.isBuiltin(original), isFalse);
+
+    await repo.removeCustom('ios-dev');
+    expect(repo.isBuiltin(original), isTrue);
+    expect(repo.resolve('ios-dev@1')?.displayName, '小i');
+  });
+
+  test('updateCustom persists across instances', () async {
+    final file = File('${dir.path}/custom.json');
+    final repo = TemplateRepository(file);
+    await repo.loadCustom();
+    await repo.updateCustom(AgentTemplate(
+      id: 'frontend', version: 1, defaultName: 'fe', displayName: '小前改',
+      role: '前端', probePrompt: '改了', matchGlobs: ['package.json'],
+    ));
+
+    final repo2 = TemplateRepository(file);
+    await repo2.loadCustom();
+    expect(repo2.resolve('frontend@1')?.displayName, '小前改');
+  });
+
+  test('cloneBuiltin returns editable copy', () {
+    final repo = TemplateRepository(File('${dir.path}/clone.json'));
+    final original = kBuiltinTemplates.firstWhere((t) => t.id == 'backend');
+    final clone = repo.cloneBuiltin(original);
+    expect(clone.id, original.id);
+    expect(clone.probePrompt, original.probePrompt);
+    expect(identical(clone, original), isFalse);
+  });
 }

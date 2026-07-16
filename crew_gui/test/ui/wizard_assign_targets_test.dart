@@ -15,8 +15,8 @@ void main() {
     await tester.pumpWidget(CrewApp(home: Scaffold(body: StepAssign(wizard: wizard))));
     await tester.tap(find.text('自动分配'));
     await tester.pumpAndSettle();
-    // backend 关联到唯一目录（静态探测无命中时 autoAssign 给空，这里手动勾选验证 chip 存在）
-    expect(find.text('/repo/ios'), findsWidgets);
+    // chip 标签显示 basename（'ios'），不是完整路径
+    expect(find.text('ios'), findsWidgets);
   });
 
   testWidgets('StepTargets toggles keep at least one', (tester) async {
