@@ -37,6 +37,18 @@ void main() {
     expect(byPath['CLAUDE.md'], contains('产品'));
   });
 
+  test('DocsAdapter team docs include growth convention', () {
+    final arts = DocsAdapter().render(_r());
+    final byPath = {for (final a in arts) a.relativePath: a.content};
+    expect(byPath['CLAUDE.md'], contains('团队记忆与成长约定'));
+    expect(byPath['CLAUDE.md'], contains('召回'));
+    expect(byPath['CLAUDE.md'], contains('蒸馏'));
+    expect(byPath['CLAUDE.md'], contains('solved'));
+    expect(byPath['CLAUDE.md'], contains('playbooks'));
+    // AGENTS.md 共享同一内容
+    expect(byPath['AGENTS.md'], contains('团队记忆与成长约定'));
+  });
+
   test('McpAdapter emits .mcp.json with empty servers', () {
     final arts = McpAdapter().render(_r());
     final mcp = arts.firstWhere((a) => a.relativePath == '.mcp.json');
