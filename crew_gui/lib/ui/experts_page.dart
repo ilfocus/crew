@@ -432,11 +432,6 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
       appBar: AppBar(
         title: Text(widget.isNew ? '新建专家' : '编辑专家'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.preview_outlined),
-            tooltip: '预览生成文件',
-            onPressed: _showPreview,
-          ),
           if (widget.onAiRefine != null)
             IconButton(
               icon: const Icon(Icons.auto_awesome_rounded),
@@ -450,205 +445,313 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              if (widget.isBuiltinOriginal && !widget.isNew)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer
-                        .withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: theme.colorScheme.outlineVariant),
-                  ),
-                  child: Row(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // 宽窗：左编辑 + 右实时预览；窄窗：仅编辑表单（预览走底部按钮）
+          final wide = constraints.maxWidth > 1100;
+          if (wide) {
+            return Row(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: _buildForm(theme, constrained: false),
+                ),
+                VerticalDivider(
+                    width: 1, thickness: 1, color: theme.dividerColor),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(Icons.info_outline_rounded,
-                          size: 16, color: theme.colorScheme.secondary),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text('这是内置模板。编辑后会保存为自定义版本，覆盖原内置模板。'),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          border: Border(
+                            bottom: BorderSide(
+                                color: theme.dividerColor, width: 1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.preview_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Text(
+                              '生成文件预览',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.info_outline_rounded,
+                                  size: 16),
+                              tooltip: '说明',
+                              onPressed: () => _showPreviewInfo(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: _EditPreviewPanel(
+                          controllers: [
+                            _idCtrl,
+                            _defaultNameCtrl,
+                            _displayNameCtrl,
+                            _roleCtrl,
+                            _personalityCtrl,
+                            _principlesCtrl,
+                            _matchGlobsCtrl,
+                            _probePromptCtrl,
+                          ],
+                          buildTemplate: _buildFromForm,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              // 基本信息区
-              const _SectionLabel('基本信息'),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _idCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'ID',
-                        border: OutlineInputBorder(),
-                        hintText: '如 ios-dev',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: _defaultNameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: '默认名称',
-                        border: OutlineInputBorder(),
-                        hintText: '如 ios',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _displayNameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: '显示名称',
-                        border: OutlineInputBorder(),
-                        hintText: '如 小i',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: _roleCtrl,
-                      decoration: const InputDecoration(
-                        labelText: '角色职责',
-                        border: OutlineInputBorder(),
-                        hintText: '如 iOS 开发工程师',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
+              ],
+            );
+          }
+          // 窄窗：原布局 + 底部预览按钮
+          return _buildForm(theme, constrained: true, showPreviewBtn: true);
+        },
+      ),
+    );
+  }
 
-              // 人格与判断标准
-              const _SectionLabel('人格与判断标准'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _personalityCtrl,
+  /// 构建编辑表单。constrained=true 时居中限宽 640（窄窗）；
+  /// showPreviewBtn=true 时在底部显示「预览生成文件」按钮。
+  Widget _buildForm(ThemeData theme,
+      {required bool constrained, bool showPreviewBtn = false}) {
+    final form = ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        if (widget.isBuiltinOriginal && !widget.isNew)
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.secondaryContainer
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: theme.colorScheme.secondary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('这是内置模板。编辑后会保存为自定义版本，覆盖原内置模板。'),
+                ),
+              ],
+            ),
+          ),
+        // 基本信息区
+        const _SectionLabel('基本信息'),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _idCtrl,
                 decoration: const InputDecoration(
-                  labelText: '人格',
+                  labelText: 'ID',
                   border: OutlineInputBorder(),
-                  hintText: '严谨、重性能',
+                  hintText: '如 ios-dev',
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _principlesCtrl,
-                maxLines: 3,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextField(
+                controller: _defaultNameCtrl,
                 decoration: const InputDecoration(
-                  labelText: '判断标准',
+                  labelText: '默认名称',
                   border: OutlineInputBorder(),
-                  hintText: '逗号或换行分隔，如：主线程不做 IO, 依赖锁版本',
+                  hintText: '如 ios',
                 ),
               ),
-              const SizedBox(height: 28),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _displayNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: '显示名称',
+                  border: OutlineInputBorder(),
+                  hintText: '如 小i',
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextField(
+                controller: _roleCtrl,
+                decoration: const InputDecoration(
+                  labelText: '角色职责',
+                  border: OutlineInputBorder(),
+                  hintText: '如 iOS 开发工程师',
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
 
-              // 匹配规则
-              const _SectionLabel('匹配规则'),
-              const SizedBox(height: 4),
-              Text(
-                '逗号分隔的 glob 模式，用于自动匹配项目目录（如 *.swift, Podfile）',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _matchGlobsCtrl,
-                decoration: const InputDecoration(
-                  labelText: '匹配 Glob',
-                  border: OutlineInputBorder(),
-                  hintText: '*.swift, Podfile, *.xcworkspace',
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              // Probe Prompt
-              const _SectionLabel('探查 Prompt'),
-              const SizedBox(height: 4),
-              Text(
-                'AI 探查项目时使用的 prompt，定义专家如何分析代码库',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _probePromptCtrl,
-                maxLines: 12,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '探查 prompt...',
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (widget.onAiRefine != null)
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                  label: const Text('AI 辅助优化'),
-                  onPressed: _aiRefine,
-                ),
-
-              const SizedBox(height: 32),
-              // 底部操作
-              Row(
-                children: [
-                  FilledButton.icon(
-                    icon: const Icon(Icons.save_rounded, size: 18),
-                    label: const Text('保存'),
-                    onPressed: _save,
-                  ),
-                  const SizedBox(width: 12),
-                  if (!widget.isBuiltinOriginal && !widget.isNew)
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      label: const Text('删除'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error,
-                      ),
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('删除专家'),
-                            content: Text('确定删除「${_displayNameCtrl.text}」？'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text('取消'),
-                              ),
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.error,
-                                ),
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text('删除'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (ok == true) _delete();
-                      },
-                    ),
-                ],
-              ),
-            ],
+        // 人格与判断标准
+        const _SectionLabel('人格与判断标准'),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _personalityCtrl,
+          decoration: const InputDecoration(
+            labelText: '人格',
+            border: OutlineInputBorder(),
+            hintText: '严谨、重性能',
           ),
         ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _principlesCtrl,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: '判断标准',
+            border: OutlineInputBorder(),
+            hintText: '逗号或换行分隔，如：主线程不做 IO, 依赖锁版本',
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // 匹配规则
+        const _SectionLabel('匹配规则'),
+        const SizedBox(height: 4),
+        Text(
+          '逗号分隔的 glob 模式，用于自动匹配项目目录（如 *.swift, Podfile）',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _matchGlobsCtrl,
+          decoration: const InputDecoration(
+            labelText: '匹配 Glob',
+            border: OutlineInputBorder(),
+            hintText: '*.swift, Podfile, *.xcworkspace',
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // Probe Prompt
+        const _SectionLabel('探查 Prompt'),
+        const SizedBox(height: 4),
+        Text(
+          'AI 探查项目时使用的 prompt，定义专家如何分析代码库',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _probePromptCtrl,
+          maxLines: 12,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: '探查 prompt...',
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (widget.onAiRefine != null)
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+            label: const Text('AI 辅助优化'),
+            onPressed: _aiRefine,
+          ),
+
+        const SizedBox(height: 32),
+        // 底部操作
+        Row(
+          children: [
+            FilledButton.icon(
+              icon: const Icon(Icons.save_rounded, size: 18),
+              label: const Text('保存'),
+              onPressed: _save,
+            ),
+            const SizedBox(width: 12),
+            if (showPreviewBtn)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.preview_outlined, size: 18),
+                label: const Text('预览生成文件'),
+                onPressed: _showPreview,
+              ),
+            const SizedBox(width: 12),
+            if (!widget.isBuiltinOriginal && !widget.isNew)
+              OutlinedButton.icon(
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                label: const Text('删除'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                ),
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('删除专家'),
+                      content: Text('确定删除「${_displayNameCtrl.text}」？'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('取消'),
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.error,
+                          ),
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('删除'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) _delete();
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+    if (!constrained) return form;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: form,
+      ),
+    );
+  }
+
+  void _showPreviewInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('关于此预览'),
+        content: const Text(
+          '此预览用当前表单的值实时渲染专家生成后会产出的 md 文件。\n\n'
+          '注意：模板本身没有探查字段（项目坐标/模块结构/技术栈/SDK/重难点等），'
+          '这些部分在实际生成时会由 CLI 探查后填充，这里留空。',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -712,17 +815,8 @@ class _TemplatePreviewPage extends StatefulWidget {
 }
 
 class _TemplatePreviewPageState extends State<_TemplatePreviewPage> {
-  int _selected = 0;
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final entry = widget.entries.isEmpty ? null : widget.entries[_selected];
-    // 按 group 分组
-    final groups = <String, List<_PreviewEntry>>{};
-    for (final e in widget.entries) {
-      groups.putIfAbsent(e.group, () => []).add(e);
-    }
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -734,29 +828,84 @@ class _TemplatePreviewPageState extends State<_TemplatePreviewPage> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth > 720;
-          final fileList = _buildFileList(theme, groups);
-          final contentPanel = _buildContentPanel(theme, entry);
-          if (!wide) {
-            return Column(
-              children: [
-                SizedBox(height: 140, child: fileList),
-                const Divider(height: 1),
-                Expanded(child: contentPanel),
-              ],
-            );
-          }
-          return Row(
+      body: _PreviewPane(entries: widget.entries),
+    );
+  }
+
+  void _showInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('关于此预览'),
+        content: const Text(
+          '此预览用当前表单的值渲染专家生成后会产出的 md 文件。\n\n'
+          '注意：模板本身没有探查字段（项目坐标/模块结构/技术栈/SDK/重难点等），'
+          '这些部分在实际生成时会由 CLI 探查后填充，这里留空。',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 可复用的预览面板：左侧文件列表（按 group 分组）+ 右侧内容查看。
+///
+/// 宽窗（>720）左右分栏；窄窗上下叠放（列表高度 140）。
+class _PreviewPane extends StatefulWidget {
+  final List<_PreviewEntry> entries;
+  const _PreviewPane({required this.entries});
+
+  @override
+  State<_PreviewPane> createState() => _PreviewPaneState();
+}
+
+class _PreviewPaneState extends State<_PreviewPane> {
+  int _selected = 0;
+
+  @override
+  void didUpdateWidget(covariant _PreviewPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // entries 内容变化时保留选中（除非越界）
+    if (_selected >= widget.entries.length) _selected = 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final entry =
+        widget.entries.isEmpty ? null : widget.entries[_selected];
+    final groups = <String, List<_PreviewEntry>>{};
+    for (final e in widget.entries) {
+      groups.putIfAbsent(e.group, () => []).add(e);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth > 720;
+        final fileList = _buildFileList(theme, groups);
+        final contentPanel = _buildContentPanel(theme, entry);
+        if (!wide) {
+          return Column(
             children: [
-              SizedBox(width: 240, child: fileList),
-              VerticalDivider(width: 1, thickness: 1, color: theme.dividerColor),
+              SizedBox(height: 140, child: fileList),
+              const Divider(height: 1),
               Expanded(child: contentPanel),
             ],
           );
-        },
-      ),
+        }
+        return Row(
+          children: [
+            SizedBox(width: 220, child: fileList),
+            VerticalDivider(
+                width: 1, thickness: 1, color: theme.dividerColor),
+            Expanded(child: contentPanel),
+          ],
+        );
+      },
     );
   }
 
@@ -910,24 +1059,74 @@ class _TemplatePreviewPageState extends State<_TemplatePreviewPage> {
       ),
     );
   }
+}
 
-  void _showInfo(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('关于此预览'),
-        content: const Text(
-          '此预览用当前表单的值渲染专家生成后会产出的 md 文件。\n\n'
-          '注意：模板本身没有探查字段（项目坐标/模块结构/技术栈/SDK/重难点等），'
-          '这些部分在实际生成时会由 CLI 探查后填充，这里留空。',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
+/// 编辑页右侧的实时预览面板：监听 controllers 变化，用当前表单值重新渲染 md。
+class _EditPreviewPanel extends StatefulWidget {
+  final List<TextEditingController> controllers;
+  final AgentTemplate Function() buildTemplate;
+  const _EditPreviewPanel({
+    required this.controllers,
+    required this.buildTemplate,
+  });
+
+  @override
+  State<_EditPreviewPanel> createState() => _EditPreviewPanelState();
+}
+
+class _EditPreviewPanelState extends State<_EditPreviewPanel> {
+  @override
+  void initState() {
+    super.initState();
+    for (final c in widget.controllers) {
+      c.addListener(_onChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in widget.controllers) {
+      c.removeListener(_onChange);
+    }
+    super.dispose();
+  }
+
+  void _onChange() => setState(() {});
+
+  List<_PreviewEntry> _buildEntries() {
+    final t = widget.buildTemplate();
+    const preview = TemplatePreview();
+    final name = t.defaultName.isEmpty ? 'agent' : t.defaultName;
+    return [
+      _PreviewEntry(
+        relativePath: '.claude/agents/$name.md',
+        label: '$name.md',
+        group: 'Agent 配置',
+        content: preview.renderClaudeAgent(t),
       ),
-    );
+      _PreviewEntry(
+        relativePath: '.codex/agents/$name.toml',
+        label: '$name.toml',
+        group: 'Agent 配置',
+        content: preview.renderCodexAgent(t),
+      ),
+      _PreviewEntry(
+        relativePath: 'memory/$name/MEMORY.md',
+        label: 'MEMORY.md',
+        group: '记忆',
+        content: preview.renderMemoryIndex(t),
+      ),
+      _PreviewEntry(
+        relativePath: 'memory/$name/project-notes.md',
+        label: 'project-notes.md',
+        group: '记忆',
+        content: preview.renderProjectNotes(t),
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PreviewPane(entries: _buildEntries());
   }
 }
