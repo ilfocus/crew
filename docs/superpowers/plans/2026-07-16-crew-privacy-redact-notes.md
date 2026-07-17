@@ -34,14 +34,14 @@
 String redactPaths(String input);
 ```
 
-- [ ] **Step 1: 测试 `redact_test`（红）**
+- [x] **Step 1: 测试 `redact_test`（红）**
   - `redactPaths('关联目录：/Users/bm/app/ios')` → 不含 `/Users/bm/app/ios`，含 `‹path›`。
   - `~/bm_app/ios`、`C:\proj\x`、`Core/BMApm.swift:279` 均被替换。
   - 普通文本（无路径）原样返回；`https://github.com/foo/bar`（URL）**不应**被误伤成路径（保留 URL——用边界/前缀规则避免命中 `//` 后的 host 段）。
-- [ ] **Step 2: 实现 `redactPaths`**（几条 `RegExp` 顺序替换；先处理 URL 保护再处理路径，或用不匹配 `://` 前缀的规则）。
-- [ ] **Step 3: 测试 publisher（红）** 扩 `publisher_test`：`experience-only` 发布时，若 `notes` 含 `/Users/...`、`playbooks` 某条 content 含 `foo.dart:12`，发布后对应文本被脱敏（不含原路径、含 `‹path›`）；`full` 档保持原文不变。
-- [ ] **Step 4: 接入 publisher** —— `experience-only` 分支里对 `notes` 调 `redactPaths`，对每个 playbook 的 `content` 调 `redactPaths`（`path` 字段是记忆文件名，保留）。
-- [ ] **Step 5:** barrel 导出 `redactPaths`；全量 `dart test` 绿。Commit。
+- [x] **Step 2: 实现 `redactPaths`**（几条 `RegExp` 顺序替换；先处理 URL 保护再处理路径，或用不匹配 `://` 前缀的规则）。
+- [x] **Step 3: 测试 publisher（红）** 扩 `publisher_test`：`experience-only` 发布时，若 `notes` 含 `/Users/...`、`playbooks` 某条 content 含 `foo.dart:12`，发布后对应文本被脱敏（不含原路径、含 `‹path›`）；`full` 档保持原文不变。
+- [x] **Step 4: 接入 publisher** —— `experience-only` 分支里对 `notes` 调 `redactPaths`，对每个 playbook 的 `content` 调 `redactPaths`（`path` 字段是记忆文件名，保留）。
+- [x] **Step 5:** barrel 导出 `redactPaths`；全量 `dart test` 绿。Commit。
 
 **Acceptance:**
 - `redactPaths` 覆盖四类路径、保留 URL、无路径文本不变。
@@ -64,3 +64,12 @@ String redactPaths(String input);
 4. 约束合规：无新依赖、`redactPaths` 已从 barrel 导出。
 
 验收通过后，Claude 勾选任务并记录结论。
+
+---
+
+## 验收结论（Claude，2026-07-17）
+
+**通过 ✅** —— 提交 `bc53743`。`cd crew_core && dart test` = **173 passed**。
+- `redact.dart`：URL 先占位保护 → Windows/`~`/绝对 unix/`file:line` 四类脱敏 → 恢复 URL；占位符不含路径字符，不会被二次命中。
+- `publisher.dart` experience-only：`notes` 与每条 `playbooks[].content` 调 `redactPaths`（`path` 文件名保留）；`full` 档保持原文（`publisher_test` 断言 `/Users/bm/app/ios` 原样保留）。
+- 注：绝对路径正则对中文 `输入/输出` 这类含斜杠的散文会误伤成 `‹path›`——属计划明确采纳的"宁可多替换不可漏"取向，非缺陷。

@@ -64,11 +64,11 @@ class ExpertPoolService {
 - `publish` 内部：`WorkspaceReader(workspacePath).readAgent(agentName)` → `RepoAnalyzer().gitRemoteUrl` → `publishProject` → `pool.saveProject` →（domain 非空）`mergeIntoDomain(..., runner: runnerFactory())` → `pool.saveDomain`。
 - `useExpert` 内部：`pool.loadDomain` → `instantiate` → `WritePlanner` 写 seed 到 `intoPath`。
 
-- [ ] **Step 1: 测试**（临时 pool + FakeRunner + 造一个含 `.crew/specs`+memory 的临时 workspace）：
+- [x] **Step 1: 测试**（临时 pool + FakeRunner + 造一个含 `.crew/specs`+memory 的临时 workspace）：
   - `publish(experience-only, domain:'quant')` → `list()` 出现 project + domain 专家；domain.learnedProjectIds 含该项目。
   - `useExpert('quant', into=tmp, ...)` → 目标目录出现 `memory/<name>/domain-notes.md`、`playbooks/`、**无 solved/**。
-- [ ] **Step 2:** 实现（`defaultForTool` 解析 HOME；纯逻辑可注入）。
-- [ ] **Step 3:** `flutter test test/services/expert_pool_service_test.dart` + 全量绿。Commit。
+- [x] **Step 2:** 实现（`defaultForTool` 解析 HOME；纯逻辑可注入）。
+- [x] **Step 3:** `flutter test test/services/expert_pool_service_test.dart` + 全量绿。Commit。
 
 **Acceptance:** service 编排正确、依赖可注入；调用产物无 L1。
 
@@ -89,9 +89,9 @@ class ExpertPoolService {
   - 可选 domain 文本框（填了就并入领域专家）
   - 确认 → 调 `ExpertPoolService.publish(...)`，成功 toast，失败提示。
 
-- [ ] **Step 1: 测试**（widget，注入 fake `ExpertPoolService`）：点"提炼专家" → 选 agent + experience-only + domain=quant + 确认 → 断言 service.publish 被以正确参数调用，UI 显示成功。
-- [ ] **Step 2:** 实现对话框 + 接线。
-- [ ] **Step 3:** `flutter test` 全绿。Commit。
+- [x] **Step 1: 测试**（widget，注入 fake `ExpertPoolService`）：点"提炼专家" → 选 agent + experience-only + domain=quant + 确认 → 断言 service.publish 被以正确参数调用，UI 显示成功。
+- [x] **Step 2:** 实现对话框 + 接线。
+- [x] **Step 3:** `flutter test` 全绿。Commit。
 
 **Acceptance:** 能从项目列表提炼入池；参数正确传递；成功/失败反馈。
 
@@ -109,9 +109,9 @@ class ExpertPoolService {
 - 页面列出 `ExpertPoolService.list()`：project / domain 分组，显示 id/domain、learnedCount、version。
 - 领域专家条目有"应用到目录"动作 → 选目标目录（`DirectoryPicker`）+ 填 agentName/repos → 调 `useExpert(...)`，成功后可"用 CLI 打开"（复用 `WorkspaceOpener`）。
 
-- [ ] **Step 1: 测试**（widget，注入 fake service + fake picker）：list 显示预置的 domain 专家；点"应用到目录"→ 选目录 → 确认 → 断言 `useExpert` 被以正确参数调用。
-- [ ] **Step 2:** 实现页面 + Tab + 接线。
-- [ ] **Step 3:** `flutter test` 全绿。Commit。
+- [x] **Step 1: 测试**（widget，注入 fake service + fake picker）：list 显示预置的 domain 专家；点"应用到目录"→ 选目录 → 确认 → 断言 `useExpert` 被以正确参数调用。
+- [x] **Step 2:** 实现页面 + Tab + 接线。
+- [x] **Step 3:** `flutter test` 全绿。Commit。
 
 **Acceptance:** 专家池可浏览；领域专家可实例化到指定目录。
 
@@ -132,3 +132,18 @@ class ExpertPoolService {
 5. **边界合规**：仅动 `crew_gui`；池路径在 GUI 层解析；widget 测试不碰真实 FS/CLI。
 
 验收通过后，Claude 勾选任务并记录结论。
+
+---
+
+## 验收结论（Claude，2026-07-17）
+
+**通过 ✅** —— 提交 `bc53743`。`cd crew_gui && flutter test` = **56 passed**。
+
+| 任务 | 结论 |
+|------|------|
+| **Task 1 ExpertPoolService** | ✅ `expert_pool_service_test`：`publish(experience-only, domain)` → list 出现 project+domain；`useExpert` 写记忆文件**无 solved/**；缺失 domain 返回错误 |
+| **Task 2 提炼入池 UI** | ✅ `publish_dialog_test`：retention 默认 experience-only 可切 full；对话框参数传给 service |
+| **Task 3 专家池页** | ✅ `expert_pool_page_test`：列表显示预置 project+domain；`app_scaffold` 加第 4 个 Tab |
+| 边界合规 | ✅ 仅动 `crew_gui`；池路径 GUI 层解析；widget 测试用 fake service |
+
+**非阻塞观察：** `publish_dialog_test` 运行时有一条非致命 `hitTestWarning`（点击目标可能部分离屏），测试通过但建议后续在该 widget 测试里用 `ensureVisible`/滚动消除警告。不影响验收。
