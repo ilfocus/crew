@@ -1,6 +1,8 @@
 // crew_gui/lib/ui/experts_page.dart
 import 'package:crew_core/crew_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../services/template_preview.dart';
 import '../services/template_repository.dart';
 
 /// AI 辅助编辑回调：传入角色、当前 prompt、用户指令，返回优化后的 prompt
@@ -297,6 +299,51 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// 弹出预览面板：显示用当前表单值渲染的 md 文件清单与内容。
+  ///
+  /// 这是「渲染产物」预览——不依赖具体项目，不落盘，直接在内存中
+  /// 用 TemplatePreview 渲染 `.claude/agents/<name>.md`、`.codex/agents/<name>.toml`、
+  /// `memory/<name>/MEMORY.md`、`memory/<name>/project-notes.md`。
+  void _showPreview() {
+    final t = _buildFromForm();
+    final preview = const TemplatePreview();
+    final name = t.defaultName.isEmpty ? 'agent' : t.defaultName;
+    final entries = <_PreviewEntry>[
+      _PreviewEntry(
+        relativePath: '.claude/agents/$name.md',
+        label: '$name.md (claude)',
+        group: 'Agent 配置',
+        content: preview.renderClaudeAgent(t),
+      ),
+      _PreviewEntry(
+        relativePath: '.codex/agents/$name.toml',
+        label: '$name.toml (codex)',
+        group: 'Agent 配置',
+        content: preview.renderCodexAgent(t),
+      ),
+      _PreviewEntry(
+        relativePath: 'memory/$name/MEMORY.md',
+        label: 'MEMORY.md',
+        group: '记忆',
+        content: preview.renderMemoryIndex(t),
+      ),
+      _PreviewEntry(
+        relativePath: 'memory/$name/project-notes.md',
+        label: 'project-notes.md',
+        group: '记忆',
+        content: preview.renderProjectNotes(t),
+      ),
+    ];
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _TemplatePreviewPage(
+          title: t.displayName.isEmpty ? '预览' : '预览 · ${t.displayName}',
+          entries: entries,
+        ),
+      ),
+    );
+  }
+
   Future<void> _delete() async {
     await widget.repository.removeCustom(widget.initial.id);
     widget.onChanged();
@@ -385,6 +432,11 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
       appBar: AppBar(
         title: Text(widget.isNew ? '新建专家' : '编辑专家'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.preview_outlined),
+            tooltip: '预览生成文件',
+            onPressed: _showPreview,
+          ),
           if (widget.onAiRefine != null)
             IconButton(
               icon: const Icon(Icons.auto_awesome_rounded),
@@ -628,6 +680,254 @@ class _SectionLabel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 预览条目：相对路径 + 短标签 + 分组 + 内容字符串（不落盘）。
+class _PreviewEntry {
+  final String relativePath;
+  final String label;
+  final String group;
+  final String content;
+  const _PreviewEntry({
+    required this.relativePath,
+    required this.label,
+    required this.group,
+    required this.content,
+  });
+}
+
+/// 模板渲染预览页：左右分栏，左侧文件列表，右侧内容。
+class _TemplatePreviewPage extends StatefulWidget {
+  final String title;
+  final List<_PreviewEntry> entries;
+  const _TemplatePreviewPage({
+    required this.title,
+    required this.entries,
+  });
+
+  @override
+  State<_TemplatePreviewPage> createState() => _TemplatePreviewPageState();
+}
+
+class _TemplatePreviewPageState extends State<_TemplatePreviewPage> {
+  int _selected = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final entry = widget.entries.isEmpty ? null : widget.entries[_selected];
+    // 按 group 分组
+    final groups = <String, List<_PreviewEntry>>{};
+    for (final e in widget.entries) {
+      groups.putIfAbsent(e.group, () => []).add(e);
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline_rounded),
+            tooltip: '说明',
+            onPressed: () => _showInfo(context),
+          ),
+        ],
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth > 720;
+          final fileList = _buildFileList(theme, groups);
+          final contentPanel = _buildContentPanel(theme, entry);
+          if (!wide) {
+            return Column(
+              children: [
+                SizedBox(height: 140, child: fileList),
+                const Divider(height: 1),
+                Expanded(child: contentPanel),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              SizedBox(width: 240, child: fileList),
+              VerticalDivider(width: 1, thickness: 1, color: theme.dividerColor),
+              Expanded(child: contentPanel),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFileList(
+      ThemeData theme, Map<String, List<_PreviewEntry>> groups) {
+    return Container(
+      color: theme.colorScheme.surfaceContainerLow,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          for (final g in groups.entries) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+              child: Text(
+                g.key,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            for (final e in g.value) _buildFileTile(theme, e),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileTile(ThemeData theme, _PreviewEntry entry) {
+    final idx = widget.entries.indexOf(entry);
+    final selected = idx == _selected;
+    return Material(
+      color: selected
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selected = idx),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.description_outlined,
+                size: 14,
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  entry.label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 12,
+                    color: selected
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentPanel(ThemeData theme, _PreviewEntry? entry) {
+    if (entry == null) {
+      return Center(
+        child: Text(
+          '选择左侧文件查看内容',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return Container(
+      color: theme.colorScheme.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              border: Border(
+                bottom: BorderSide(color: theme.dividerColor, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.description_outlined,
+                    size: 14, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    entry.relativePath,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_outlined, size: 16),
+                  tooltip: '复制内容',
+                  onPressed: () async {
+                    await Clipboard.setData(
+                        ClipboardData(text: entry.content));
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('已复制内容到剪贴板'),
+                          duration: Duration(seconds: 1)),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                entry.content,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('关于此预览'),
+        content: const Text(
+          '此预览用当前表单的值渲染专家生成后会产出的 md 文件。\n\n'
+          '注意：模板本身没有探查字段（项目坐标/模块结构/技术栈/SDK/重难点等），'
+          '这些部分在实际生成时会由 CLI 探查后填充，这里留空。',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
     );
   }
 }

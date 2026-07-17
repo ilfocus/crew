@@ -1,6 +1,7 @@
 // crew_gui/lib/app_scaffold.dart
 import 'package:crew_core/crew_core.dart';
 import 'package:flutter/material.dart';
+import 'models/project_entry.dart';
 import 'services/directory_picker.dart';
 import 'services/expert_pool_service.dart';
 import 'services/project_store.dart';
@@ -11,6 +12,7 @@ import 'state/wizard_controller.dart';
 import 'ui/expert_pool_page.dart';
 import 'ui/experts_page.dart';
 import 'ui/home_page.dart';
+import 'ui/project_detail_page.dart';
 import 'ui/wizard/wizard_page.dart';
 
 class AppScaffold extends StatefulWidget {
@@ -48,6 +50,8 @@ class _AppScaffoldState extends State<AppScaffold> {
   WizardController? _wizard;
   GenerationController? _generation;
   late final ExpertPoolService _poolService;
+  // 项目详情视图：当非 null 时覆盖在当前 tab 内容之上
+  ProjectEntry? _projectDetail;
 
   @override
   void initState() {
@@ -61,6 +65,7 @@ class _AppScaffoldState extends State<AppScaffold> {
       _wizard = WizardController();
       _generation = widget.generationFactory();
       _tab = _NavTab.newProject;
+      _projectDetail = null;
     });
   }
 
@@ -69,10 +74,22 @@ class _AppScaffoldState extends State<AppScaffold> {
       _wizard = null;
       _generation = null;
       _tab = _NavTab.projects;
+      _projectDetail = null;
     });
   }
 
+  void _openProject(ProjectEntry e) {
+    setState(() => _projectDetail = e);
+  }
+
   Widget _buildContent() {
+    // 项目详情优先级最高
+    if (_projectDetail != null) {
+      return ProjectDetailPage(
+        entry: _projectDetail!,
+        opener: widget.opener,
+      );
+    }
     switch (_tab) {
       case _NavTab.newProject:
         _wizard ??= WizardController();
@@ -117,7 +134,7 @@ class _AppScaffoldState extends State<AppScaffold> {
         return HomePage(
           store: widget.store,
           onNew: _startNew,
-          onOpen: (e) => widget.opener.openFolder(e.path),
+          onOpen: _openProject,
           expertPoolService: _poolService,
         );
       case _NavTab.pool:
@@ -132,14 +149,21 @@ class _AppScaffoldState extends State<AppScaffold> {
         builder: (context, constraints) {
           // 响应式：宽窗展开侧边栏，窄窗折叠为图标轨
           final expanded = constraints.maxWidth > _sidebarBreakpoint;
+          // 侧栏选中态：当在项目详情页时高亮「项目」
+          final activeTab = _projectDetail != null ? _NavTab.projects : _tab;
           return Row(
             children: [
               _Sidebar(
-                tab: _tab,
+                tab: activeTab,
                 expanded: expanded,
                 cliTool: widget.cliTool,
                 onNew: _startNew,
-                onSelect: (t) => setState(() => _tab = t),
+                onSelect: (t) {
+                  setState(() {
+                    _projectDetail = null;
+                    _tab = t;
+                  });
+                },
               ),
               VerticalDivider(
                 width: 1,

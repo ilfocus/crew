@@ -1,7 +1,9 @@
 // crew_gui/lib/ui/expert_pool_page.dart
+import 'dart:io';
 import 'package:crew_core/crew_core.dart';
 import 'package:flutter/material.dart';
 import '../services/expert_pool_service.dart';
+import 'expert_detail_page.dart';
 
 class ExpertPoolPage extends StatefulWidget {
   final ExpertPoolService service;
@@ -85,7 +87,10 @@ class _ExpertPoolPageState extends State<ExpertPoolPage> {
                     const _GroupLabel('项目专家'),
                     const SizedBox(height: 8),
                     for (final p in projects) ...[
-                      _ProjectExpertCard(summary: p),
+                      _ProjectExpertCard(
+                        summary: p,
+                        poolRoot: widget.service.pool.root.path,
+                      ),
                       const SizedBox(height: 8),
                     ],
                   ],
@@ -219,52 +224,76 @@ class _DomainCard extends StatelessWidget {
 
 class _ProjectExpertCard extends StatelessWidget {
   final ExpertSummary summary;
-  const _ProjectExpertCard({required this.summary});
+  final String poolRoot;
+  const _ProjectExpertCard({required this.summary, required this.poolRoot});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () => _openDetail(context),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.workspaces_outline,
+                  color: theme.colorScheme.secondary,
+                  size: 18,
+                ),
               ),
-              child: Icon(
-                Icons.workspaces_outline,
-                color: theme.colorScheme.secondary,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    summary.displayName,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'id: ${summary.id} · v${summary.version}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 11,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      summary.displayName,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      'id: ${summary.id} · v${summary.version}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDetail(BuildContext context) {
+    // projectId 可能含斜杠（如 github.com/foo/bar），对应 experts/projects/<projectId>/
+    final dir = Directory('$poolRoot/projects/${summary.id}');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ExpertDetailPage(
+          title: summary.displayName,
+          expertDir: dir,
         ),
       ),
     );
