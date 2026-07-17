@@ -38,6 +38,11 @@ class AppScaffold extends StatefulWidget {
 
 enum _NavTab { newProject, experts, projects, pool }
 
+// 桌面端侧边栏展开宽度；窄窗时折叠为图标轨
+const _sidebarExpandedWidth = 240.0;
+const _sidebarCollapsedWidth = 64.0;
+const _sidebarBreakpoint = 720.0;
+
 class _AppScaffoldState extends State<AppScaffold> {
   _NavTab _tab = _NavTab.projects;
   WizardController? _wizard;
@@ -122,82 +127,171 @@ class _AppScaffoldState extends State<AppScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
-      body: Row(
-        children: [
-          // 左侧导航栏
-          Container(
-            width: 200,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              border: Border(
-                right: BorderSide(color: theme.dividerColor, width: 1),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // 响应式：宽窗展开侧边栏，窄窗折叠为图标轨
+          final expanded = constraints.maxWidth > _sidebarBreakpoint;
+          return Row(
+            children: [
+              _Sidebar(
+                tab: _tab,
+                expanded: expanded,
+                cliTool: widget.cliTool,
+                onNew: _startNew,
+                onSelect: (t) => setState(() => _tab = t),
               ),
-            ),
-            child: Column(
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: Theme.of(context).dividerColor,
+              ),
+              Expanded(child: _buildContent()),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 侧边栏：品牌区 + 导航 + 底部 CLI 状态
+class _Sidebar extends StatelessWidget {
+  final _NavTab tab;
+  final bool expanded;
+  final String cliTool;
+  final VoidCallback onNew;
+  final ValueChanged<_NavTab> onSelect;
+  const _Sidebar({
+    required this.tab,
+    required this.expanded,
+    required this.cliTool,
+    required this.onNew,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: expanded ? _sidebarExpandedWidth : _sidebarCollapsedWidth,
+      color: theme.colorScheme.surfaceContainerLow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _BrandHeader(expanded: expanded),
+          const SizedBox(height: 4),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               children: [
-                // 应用标题
-                Container(
-                  height: 56,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    children: [
-                      Icon(Icons.groups_rounded,
-                          size: 24, color: theme.colorScheme.primary),
-                      const SizedBox(width: 10),
-                      Text('Crew',
-                          style: theme.textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // 导航项
-                _SidebarItem(
-                  icon: Icons.add_circle_outline,
+                _NavItem(
+                  icon: Icons.add_circle_outline_rounded,
                   label: '新建项目',
-                  selected: _tab == _NavTab.newProject,
-                  onTap: _startNew,
+                  expanded: expanded,
+                  selected: tab == _NavTab.newProject,
+                  onTap: onNew,
                 ),
-                _SidebarItem(
-                  icon: Icons.people_outline,
+                _NavItem(
+                  icon: Icons.people_outline_rounded,
                   label: '专家',
-                  selected: _tab == _NavTab.experts,
-                  onTap: () => setState(() => _tab = _NavTab.experts),
+                  expanded: expanded,
+                  selected: tab == _NavTab.experts,
+                  onTap: () => onSelect(_NavTab.experts),
                 ),
-                _SidebarItem(
+                _NavItem(
                   icon: Icons.folder_outlined,
                   label: '项目',
-                  selected: _tab == _NavTab.projects,
-                  onTap: () => setState(() => _tab = _NavTab.projects),
+                  expanded: expanded,
+                  selected: tab == _NavTab.projects,
+                  onTap: () => onSelect(_NavTab.projects),
                 ),
-                _SidebarItem(
-                  icon: Icons.pool_outlined,
+                _NavItem(
+                  icon: Icons.workspace_premium_outlined,
                   label: '专家池',
-                  selected: _tab == _NavTab.pool,
-                  onTap: () => setState(() => _tab = _NavTab.pool),
+                  expanded: expanded,
+                  selected: tab == _NavTab.pool,
+                  onTap: () => onSelect(_NavTab.pool),
                 ),
               ],
             ),
           ),
-          // 右侧内容区
-          Expanded(child: _buildContent()),
+          if (expanded) _SidebarFooter(cliTool: cliTool),
         ],
       ),
     );
   }
 }
 
-class _SidebarItem extends StatelessWidget {
+class _BrandHeader extends StatelessWidget {
+  final bool expanded;
+  const _BrandHeader({required this.expanded});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final logo = Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.primary,
+            theme.colorScheme.primary.withValues(alpha: 0.7),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(Icons.groups_rounded, size: 18, color: theme.colorScheme.onPrimary),
+    );
+    if (!expanded) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        child: Center(child: logo),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+      child: Row(
+        children: [
+          logo,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Crew',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+                Text(
+                  'Multi-agent crew builder',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool expanded;
   final bool selected;
   final VoidCallback onTap;
-  const _SidebarItem({
+  const _NavItem({
     required this.icon,
     required this.label,
+    required this.expanded,
     required this.selected,
     required this.onTap,
   });
@@ -205,44 +299,110 @@ class _SidebarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.zero,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color:
-                selected ? theme.colorScheme.primaryContainer : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: selected
-                    ? theme.colorScheme.primary
-                    : Colors.transparent,
-                width: 3,
-              ),
+    final selectedBg = theme.colorScheme.primaryContainer;
+    final selectedFg = theme.colorScheme.onPrimaryContainer;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
+        color: selected ? selectedBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          hoverColor: theme.colorScheme.surfaceContainerHigh
+              .withValues(alpha: selected ? 0 : 0.6),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: expanded ? 12 : 0,
+              vertical: 10,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon,
-                  size: 20,
-                  color: selected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant),
-              const SizedBox(width: 12),
-              Text(label,
-                  style: TextStyle(
-                    color: selected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                    fontWeight:
-                        selected ? FontWeight.w600 : FontWeight.normal,
-                  )),
-            ],
+            child: expanded
+                ? Row(
+                    children: [
+                      Icon(icon,
+                          size: 18,
+                          color: selected
+                              ? selectedFg
+                              : theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                selected ? FontWeight.w600 : FontWeight.w500,
+                            color: selected
+                                ? selectedFg
+                                : theme.colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  )
+                : Center(
+                    child: Icon(icon,
+                        size: 20,
+                        color: selected
+                            ? selectedFg
+                            : theme.colorScheme.onSurfaceVariant),
+                  ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SidebarFooter extends StatelessWidget {
+  final String cliTool;
+  const _SidebarFooter({required this.cliTool});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: theme.dividerColor, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'CLI · $cliTool',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  '已就绪',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

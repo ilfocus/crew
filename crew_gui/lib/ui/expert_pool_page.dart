@@ -38,94 +38,234 @@ class _ExpertPoolPageState extends State<ExpertPoolPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('专家池'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             tooltip: '刷新',
             onPressed: _refresh,
           ),
         ],
       ),
-      body: FutureBuilder<List<ExpertSummary>>(
-        future: _future,
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snap.data!;
-          if (items.isEmpty) {
-            return const Center(
-              child: Text('专家池为空。从项目列表中"提炼专家"来填充。'),
-            );
-          }
-          final domains =
-              items.where((e) => e.kind == ExpertKind.domain).toList();
-          final projects =
-              items.where((e) => e.kind == ExpertKind.project).toList();
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (domains.isNotEmpty) ...[
-                _SectionTitle('领域专家'),
-                const SizedBox(height: 8),
-                for (final d in domains)
-                  Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: theme.colorScheme.primaryContainer,
-                        child: Icon(Icons.auto_awesome,
-                            color: theme.colorScheme.primary, size: 20),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: FutureBuilder<List<ExpertSummary>>(
+            future: _future,
+            builder: (context, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final items = snap.data!;
+              if (items.isEmpty) {
+                return const _EmptyPool();
+              }
+              final domains =
+                  items.where((e) => e.kind == ExpertKind.domain).toList();
+              final projects =
+                  items.where((e) => e.kind == ExpertKind.project).toList();
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                children: [
+                  if (domains.isNotEmpty) ...[
+                    const _GroupLabel('领域专家'),
+                    const SizedBox(height: 8),
+                    for (final d in domains) ...[
+                      _DomainCard(
+                        summary: d,
+                        onApply: () => _showApplyDialog(d),
                       ),
-                      title: Text(d.displayName),
-                      subtitle: Text('domain: ${d.id} · v${d.version}'),
-                      trailing: FilledButton.tonal(
-                        onPressed: () => _showApplyDialog(d),
-                        child: const Text('应用到目录'),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-              ],
-              if (projects.isNotEmpty) ...[
-                _SectionTitle('项目专家'),
-                const SizedBox(height: 8),
-                for (final p in projects)
-                  Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        child: Icon(Icons.workspaces_outline,
-                            color: theme.colorScheme.secondary, size: 20),
-                      ),
-                      title: Text(p.displayName),
-                      subtitle: Text('id: ${p.id} · v${p.version}'),
-                    ),
-                  ),
-              ],
-            ],
-          );
-        },
+                      const SizedBox(height: 8),
+                    ],
+                    if (projects.isNotEmpty) const SizedBox(height: 12),
+                  ],
+                  if (projects.isNotEmpty) ...[
+                    const _GroupLabel('项目专家'),
+                    const SizedBox(height: 8),
+                    for (final p in projects) ...[
+                      _ProjectExpertCard(summary: p),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
+class _EmptyPool extends StatelessWidget {
+  const _EmptyPool();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Text(
-      text,
-      style: theme.textTheme.titleMedium?.copyWith(
-        fontWeight: FontWeight.bold,
-        color: theme.colorScheme.primary,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.workspace_premium_outlined,
+              size: 40,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '专家池为空',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '从项目列表中「提炼专家」来填充',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupLabel extends StatelessWidget {
+  final String text;
+  const _GroupLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: theme.colorScheme.onSurfaceVariant,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
+class _DomainCard extends StatelessWidget {
+  final ExpertSummary summary;
+  final VoidCallback onApply;
+  const _DomainCard({required this.summary, required this.onApply});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                color: theme.colorScheme.primary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    summary.displayName,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'domain: ${summary.id} · v${summary.version}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonal(
+              onPressed: onApply,
+              child: const Text('应用到目录'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectExpertCard extends StatelessWidget {
+  final ExpertSummary summary;
+  const _ProjectExpertCard({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.workspaces_outline,
+                color: theme.colorScheme.secondary,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    summary.displayName,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'id: ${summary.id} · v${summary.version}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -205,52 +345,46 @@ class _ApplyExpertDialogState extends State<_ApplyExpertDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text('应用领域专家：${widget.domain.displayName}'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _pathCtrl,
-              decoration: const InputDecoration(
-                labelText: '目标目录路径',
-                border: OutlineInputBorder(),
-                hintText: '/path/to/project',
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _pathCtrl,
+                decoration: const InputDecoration(
+                  labelText: '目标目录路径',
+                  hintText: '/path/to/project',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _agentCtrl,
-              decoration: const InputDecoration(
-                labelText: 'agent 名称',
-                border: OutlineInputBorder(),
-                hintText: '如 ios',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _agentCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'agent 名称',
+                  hintText: '如 ios',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reposCtrl,
-              decoration: const InputDecoration(
-                labelText: '仓库（逗号分隔）',
-                border: OutlineInputBorder(),
-                hintText: '~/proj/repo1, ~/proj/repo2',
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reposCtrl,
+                decoration: const InputDecoration(
+                  labelText: '仓库（逗号分隔）',
+                  hintText: '~/proj/repo1, ~/proj/repo2',
+                ),
               ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 13)),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                _AlertBanner(text: _error!, isError: true),
+              ],
+              if (_result != null) ...[
+                const SizedBox(height: 12),
+                _AlertBanner(text: _result!, isError: false),
+              ],
             ],
-            if (_result != null) ...[
-              const SizedBox(height: 8),
-              Text(_result!,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontSize: 13)),
-            ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -263,6 +397,42 @@ class _ApplyExpertDialogState extends State<_ApplyExpertDialog> {
           child: const Text('确认'),
         ),
       ],
+    );
+  }
+}
+
+class _AlertBanner extends StatelessWidget {
+  final String text;
+  final bool isError;
+  const _AlertBanner({required this.text, required this.isError});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isError ? theme.colorScheme.error : theme.colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isError ? Icons.error_outline_rounded : Icons.check_circle_outline,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

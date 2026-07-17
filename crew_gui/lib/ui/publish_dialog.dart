@@ -68,69 +68,106 @@ class _PublishDialogState extends State<PublishDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
       title: const Text('提炼专家'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Agent', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-            DropdownButton<String>(
-              value: _agentName,
-              hint: const Text('选择 agent'),
-              isExpanded: true,
-              items: widget.agentNames
-                  .map((n) => DropdownMenuItem(value: n, child: Text(n)))
-                  .toList(),
-              onChanged: (v) => setState(() => _agentName = v),
-            ),
-            const SizedBox(height: 12),
-            const Text('保留策略',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-            for (final r in const [
-              ('full', '完整保留'),
-              ('experience-only', '仅保留经验'),
-              ('none', '不发布'),
-            ])
-              RadioListTile<String>(
-                value: r.$1,
-                groupValue: _retention,
-                title: Text(r.$2),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() => _retention = v!),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionLabel(text: 'Agent'),
+              const SizedBox(height: 6),
+              DropdownButton<String>(
+                value: _agentName,
+                hint: const Text('选择 agent'),
+                isExpanded: true,
+                items: widget.agentNames
+                    .map((n) => DropdownMenuItem(value: n, child: Text(n)))
+                    .toList(),
+                onChanged: (v) => setState(() => _agentName = v),
               ),
-            const SizedBox(height: 8),
-            const Text('来源',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-            for (final s in const [
-              ('opensource', '开源'),
-              ('private', '私有'),
-            ])
-              RadioListTile<String>(
-                value: s.$1,
-                groupValue: _source,
-                title: Text(s.$2),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() => _source = v!),
+              const SizedBox(height: 16),
+              _SectionLabel(text: '保留策略'),
+              const SizedBox(height: 4),
+              _GroupCard(
+                children: [
+                  for (final r in const [
+                    ('full', '完整保留'),
+                    ('experience-only', '仅保留经验'),
+                    ('none', '不发布'),
+                  ])
+                    RadioListTile<String>(
+                      value: r.$1,
+                      groupValue: _retention,
+                      title: Text(r.$2),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      onChanged: (v) => setState(() => _retention = v!),
+                    ),
+                ],
               ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _domainCtrl,
-              decoration: const InputDecoration(
-                labelText: '领域（可选）',
-                border: OutlineInputBorder(),
-                hintText: '如 quant',
+              const SizedBox(height: 14),
+              _SectionLabel(text: '来源'),
+              const SizedBox(height: 4),
+              _GroupCard(
+                children: [
+                  for (final s in const [
+                    ('opensource', '开源'),
+                    ('private', '私有'),
+                  ])
+                    RadioListTile<String>(
+                      value: s.$1,
+                      groupValue: _source,
+                      title: Text(s.$2),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      onChanged: (v) => setState(() => _source = v!),
+                    ),
+                ],
               ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 13)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _domainCtrl,
+                decoration: const InputDecoration(
+                  labelText: '领域（可选）',
+                  border: OutlineInputBorder(),
+                  hintText: '如 quant',
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: theme.colorScheme.error.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 14, color: theme.colorScheme.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                              color: theme.colorScheme.error, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -143,6 +180,48 @@ class _PublishDialogState extends State<PublishDialog> {
           child: const Text('确认'),
         ),
       ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: theme.textTheme.labelLarge?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        letterSpacing: 0.4,
+      ),
+    );
+  }
+}
+
+class _GroupCard extends StatelessWidget {
+  final List<Widget> children;
+  const _GroupCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
     );
   }
 }

@@ -66,98 +66,103 @@ class _WizardPageState extends State<WizardPage> {
     final wizard = widget.wizard;
     return Scaffold(
       appBar: AppBar(title: const Text('新建 Crew 项目')),
-      body: ListenableBuilder(
-        listenable: wizard,
-        builder: (context, _) {
-          final current = _order[_index];
-          return Stepper(
-            currentStep: _index,
-            controlsBuilder: (context, details) {
-              // Stepper 为每个 step 都调用 controlsBuilder（在 AnimatedCrossFade
-              // 里维持状态）。只给当前步渲染实际按钮，避免 find.text 误匹配。
-              if (details.stepIndex != details.currentStep) {
-                return const SizedBox.shrink();
-              }
-              final isLast = details.stepIndex == _order.length - 1;
-              return OverflowBar(
-                spacing: 8,
-                children: [
-                  if (!isLast)
-                    TextButton(
-                      onPressed: details.onStepContinue,
-                      child: const Text('下一步'),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListenableBuilder(
+            listenable: wizard,
+            builder: (context, _) {
+              final current = _order[_index];
+              return Stepper(
+                currentStep: _index,
+                controlsBuilder: (context, details) {
+                  // Stepper 为每个 step 都调用 controlsBuilder（在 AnimatedCrossFade
+                  // 里维持状态）。只给当前步渲染实际按钮，避免 find.text 误匹配。
+                  if (details.stepIndex != details.currentStep) {
+                    return const SizedBox.shrink();
+                  }
+                  final isLast = details.stepIndex == _order.length - 1;
+                  return OverflowBar(
+                    spacing: 8,
+                    children: [
+                      if (!isLast)
+                        TextButton(
+                          onPressed: details.onStepContinue,
+                          child: const Text('下一步'),
+                        ),
+                      if (details.onStepCancel != null)
+                        TextButton(
+                          onPressed: details.onStepCancel,
+                          child: const Text('上一步'),
+                        ),
+                    ],
+                  );
+                },
+                onStepContinue: wizard.canProceed(current)
+                    ? () async {
+                        if (current == WizardStep.preview) {
+                          if (widget.generation.plan == null) return; // 需先生成预览
+                          await widget.generation.confirmAndEmit(_workspaceRoot());
+                          await widget.store.add(ProjectEntry(
+                            name: wizard.projectName,
+                            path: _workspaceRoot(),
+                            createdAt: _today(),
+                            repoCount: wizard.directories.length,
+                            agentCount: wizard.selectedTemplates.length,
+                          ));
+                        }
+                        if (_index < _order.length - 1) setState(() => _index++);
+                      }
+                    : null,
+                onStepCancel:
+                    _index > 0 ? () => setState(() => _index--) : null,
+                steps: [
+                  Step(
+                    title: const Text('目录'),
+                    isActive: _index >= 0,
+                    content: StepDirectories(
+                        wizard: wizard, picker: widget.picker),
+                  ),
+                  Step(
+                    title: const Text('专家'),
+                    isActive: _index >= 1,
+                    content: StepAgents(
+                        wizard: wizard, templates: widget.templates.all),
+                  ),
+                  Step(
+                    title: const Text('关联'),
+                    isActive: _index >= 2,
+                    content: StepAssign(wizard: wizard),
+                  ),
+                  Step(
+                    title: const Text('目标'),
+                    isActive: _index >= 3,
+                    content: StepTargets(wizard: wizard),
+                  ),
+                  Step(
+                    title: const Text('预览'),
+                    isActive: _index >= 4,
+                    content: StepPreview(
+                      wizard: wizard,
+                      generation: widget.generation,
+                      picker: widget.picker,
                     ),
-                  if (details.onStepCancel != null)
-                    TextButton(
-                      onPressed: details.onStepCancel,
-                      child: const Text('上一步'),
+                  ),
+                  Step(
+                    title: const Text('完成'),
+                    isActive: _index >= 5,
+                    content: StepDone(
+                      workspacePath: _workspaceRoot(),
+                      opener: widget.opener,
+                      cliTool: wizard.cliTool,
+                      onFinish: widget.onDone,
                     ),
+                  ),
                 ],
               );
             },
-            onStepContinue: wizard.canProceed(current)
-                ? () async {
-                    if (current == WizardStep.preview) {
-                      if (widget.generation.plan == null) return; // 需先生成预览
-                      await widget.generation.confirmAndEmit(_workspaceRoot());
-                      await widget.store.add(ProjectEntry(
-                        name: wizard.projectName,
-                        path: _workspaceRoot(),
-                        createdAt: _today(),
-                        repoCount: wizard.directories.length,
-                        agentCount: wizard.selectedTemplates.length,
-                      ));
-                    }
-                    if (_index < _order.length - 1) setState(() => _index++);
-                  }
-                : null,
-            onStepCancel:
-                _index > 0 ? () => setState(() => _index--) : null,
-            steps: [
-              Step(
-                title: const Text('目录'),
-                isActive: _index >= 0,
-                content: StepDirectories(
-                    wizard: wizard, picker: widget.picker),
-              ),
-              Step(
-                title: const Text('专家'),
-                isActive: _index >= 1,
-                content: StepAgents(
-                    wizard: wizard, templates: widget.templates.all),
-              ),
-              Step(
-                title: const Text('关联'),
-                isActive: _index >= 2,
-                content: StepAssign(wizard: wizard),
-              ),
-              Step(
-                title: const Text('目标'),
-                isActive: _index >= 3,
-                content: StepTargets(wizard: wizard),
-              ),
-              Step(
-                title: const Text('预览'),
-                isActive: _index >= 4,
-                content: StepPreview(
-                  wizard: wizard,
-                  generation: widget.generation,
-                  picker: widget.picker,
-                ),
-              ),
-              Step(
-                title: const Text('完成'),
-                isActive: _index >= 5,
-                content: StepDone(
-                  workspacePath: _workspaceRoot(),
-                  opener: widget.opener,
-                  cliTool: wizard.cliTool,
-                  onFinish: widget.onDone,
-                ),
-              ),
-            ],
-          );
-        },
+          ),
+        ),
       ),
     );
   }
