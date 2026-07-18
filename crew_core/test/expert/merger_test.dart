@@ -2,185 +2,227 @@
 import 'package:crew_core/crew_core.dart';
 import 'package:test/test.dart';
 
-AgentSpec _domainSpec() => const AgentSpec(
-      name: 'ios-domain',
-      displayName: 'iOS 领域专家',
-      repos: [],
-      role: 'iOS 领域工程师',
-      coordinates: '',
-      moduleStructure: '',
-      keyFiles: [],
-      dataflow: '',
-      memoryConvention: '',
-      conventions: [],
-      personality: '严谨',
-      principles: ['不引入未测试依赖'],
-      techStack: ['Swift'],
-    );
+ProjectCompetence _project({String projectId = 'github.com/foo/bar'}) {
+  return ProjectCompetence(
+    projectId: projectId,
+    repos: const ['~/bm_app/ios'],
+    coordinates: 'Core/BMApm',
+    moduleStructure: 'Core/ 单例',
+    keyFiles: const [KeyFile('Core/Foo.swift', '上报总线')],
+    dataflow: '采集 → 神策',
+    techStack: const ['Swift', 'SwiftUI'],
+    sdks: const ['SensorsSDK'],
+    difficulties: const ['线程安全'],
+    source: 'opensource',
+    github: 'https://github.com/foo/bar',
+    retention: 'full',
+    notes: 'L1 notes',
+    solved: const [MemoryEntry('solved/x.md', 'fix X')],
+    playbooks: const [MemoryEntry('playbooks/old.md', 'old playbook')],
+  );
+}
 
-AgentSpec _projectSpec() => const AgentSpec(
-      name: 'ios',
-      displayName: '小i',
-      repos: ['~/bm_app/ios'],
-      role: 'iOS 开发工程师',
-      coordinates: '路径 ~/bm_app/ios',
-      moduleStructure: 'Core/',
-      keyFiles: [KeyFile('Core/Foo.swift', '上报总线')],
-      dataflow: '',
-      memoryConvention: '',
-      conventions: [],
-      techStack: ['Swift', 'SwiftUI'],
-      difficulties: ['线程安全'],
-    );
+DomainExpertise _emptyDomain(String name) => DomainExpertise(domain: name);
 
-Expert _emptyDomain() => Expert(
-      kind: ExpertKind.domain,
-      domain: 'ios',
-      spec: _domainSpec(),
-      memory: const ExpertMemory(),
-      meta: const ExpertMeta(),
-    );
-
-Expert _project({required String projectId, String role = 'iOS APM SDK'}) =>
-    Expert(
-      kind: ExpertKind.project,
-      spec: _projectSpec().copyWith(role: role),
-      memory: const ExpertMemory(
-        notes: 'L1 notes',
-        solved: [MemoryEntry('solved/x.md', 'fix X')],
-        playbooks: [MemoryEntry('playbooks/old.md', 'old playbook')],
-      ),
-      meta: ExpertMeta(projectId: projectId, version: 1),
+FakeRunner _runnerWith(String notes, String playbookPath) => FakeRunner(
+      (dir, t) => '{}',
+      distillResponder: (prompt) => '{"domainNotes":"$notes",'
+          '"playbooks":[{"path":"$playbookPath","content":"步骤"}]}',
     );
 
 void main() {
   group('mergeIntoDomain — empty domain + one project', () {
-    test('domain has distill output, projects has 1, learnedProjectIds has 1',
+    test('domain gets distill notes/playbooks; projects has 1; project.domains has 1',
         () async {
-      final project = _project(projectId: 'github.com/foo/bar');
-      final runner = FakeRunner(
-        (dir, t) => '{}',
-        distillResponder: (prompt) =>
-            '{"domainNotes":"iOS 通用抽象","playbooks":'
-            '[{"path":"排查-内存.md","content":"Instruments"}]}',
-      );
+      final project = _project();
+      final runner = _runnerWith('iOS 通用抽象', '排查-内存.md');
 
-      final result = await mergeIntoDomain(
-        domain: _emptyDomain(),
+      final out = await mergeIntoDomain(
+        domain: _emptyDomain('ios'),
         project: project,
         runner: runner,
-        version: 5,
       );
 
-      // distill output merged
-      expect(result.memory.notes, contains('iOS 通用抽象'));
-      expect(result.memory.playbooks.length, 1);
-      expect(result.memory.playbooks.first.path, '排查-内存.md');
+      // distill output 合并进 domain.notes
+      expect(out.domain.notes, contains('iOS 通用抽象'));
+      expect(out.domain.playbooks.length, 1);
+      expect(out.domain.playbooks.first.path, '排查-内存.md');
 
-      // projects ref added
-      expect(result.memory.projects.length, 1);
-      expect(result.memory.projects.first.id, 'github.com/foo/bar');
-      expect(result.memory.projects.first.summary, 'iOS APM SDK');
+      // domain.projects 加 1 条
+      expect(out.domain.projects.length, 1);
+      expect(out.domain.projects.first.id, 'github.com/foo/bar');
 
-      // learnedProjectIds updated
-      expect(result.meta.learnedProjectIds, ['github.com/foo/bar']);
-
-      // version bumped
-      expect(result.meta.version, 5);
-
-      // domain identity preserved
-      expect(result.kind, ExpertKind.domain);
-      expect(result.domain, 'ios');
-      expect(result.spec.name, 'ios-domain');
-
-      // existing domain spec preserved
-      expect(result.spec.personality, '严谨');
-      expect(result.spec.techStack, ['Swift']);
+      // project.domains 反向索引加 1 条
+      expect(out.project.domains, contains('ios'));
     });
   });
 
-  group('mergeIntoDomain — idempotency', () {
-    test('same project merged twice does not grow projects/learnedProjectIds',
-        () async {
-      final project = _project(projectId: 'github.com/foo/bar');
-      // stable distill output
-      final runner = FakeRunner(
-        (dir, t) => '{}',
-        distillResponder: (prompt) =>
-            '{"domainNotes":"相同抽象","playbooks":'
-            '[{"path":"排查-内存.md","content":"Instruments"}]}',
-      );
+  group('mergeIntoDomain — idempotency (same project, same domain)', () {
+    test('merging twice does not duplicate projects or domains', () async {
+      final project = _project();
+      final runner = _runnerWith('抽象', '排查-内存.md');
 
       final d1 = await mergeIntoDomain(
-        domain: _emptyDomain(),
+        domain: _emptyDomain('ios'),
         project: project,
         runner: runner,
-        version: 1,
       );
+      // 第二次：domain 已含此 project 的 ref
       final d2 = await mergeIntoDomain(
-        domain: d1,
-        project: project,
+        domain: d1.domain,
+        project: d1.project, // project.domains 已含 ios
         runner: runner,
-        version: 2,
       );
 
-      // projects still only one
-      expect(d2.memory.projects.length, 1);
-      expect(d2.memory.projects.first.id, 'github.com/foo/bar');
-
-      // learnedProjectIds still only one
-      expect(d2.meta.learnedProjectIds.length, 1);
-      expect(d2.meta.learnedProjectIds, ['github.com/foo/bar']);
-
-      // playbook deduped by path
-      expect(d2.memory.playbooks.length, 1);
-      expect(d2.memory.playbooks.first.path, '排查-内存.md');
-
-      // notes still contain the abstraction (may be appended twice but still there)
-      expect(d2.memory.notes, contains('相同抽象'));
+      // projects 不重复
+      expect(d2.domain.projects.length, 1);
+      expect(d2.domain.projects.first.id, 'github.com/foo/bar');
+      // project.domains 不重复
+      expect(d2.project.domains, ['ios']);
+      // playbooks 按 path 去重
+      expect(d2.domain.playbooks.length, 1);
+      expect(d2.domain.playbooks.first.path, '排查-内存.md');
     });
   });
 
-  group('mergeIntoDomain — multiple different projects', () {
-    test('projects grows to 2 and playbooks deduped by path', () async {
-      final projectA = _project(projectId: 'github.com/foo/bar', role: 'APM');
-      final projectB = _project(projectId: 'github.com/x/y', role: '网络库');
+  group('mergeIntoDomain — multi-many (same project → multiple domains)', () {
+    test('both domains reference the project; project.domains grows to 2',
+        () async {
+      final project = _project();
+      final runner = _runnerWith('抽象', '排查-通用.md');
 
-      // Both distills emit a playbook with the same path → should be deduped
+      // 第一次：并入 ios domain
+      final m1 = await mergeIntoDomain(
+        domain: _emptyDomain('ios'),
+        project: project,
+        runner: runner,
+      );
+      // 第二次：把（已含 ios 反向索引的）project 并入 apm domain
+      final m2 = await mergeIntoDomain(
+        domain: _emptyDomain('apm'),
+        project: m1.project,
+        runner: runner,
+      );
+
+      // 两个 domain 都引用该 project
+      expect(m1.domain.projects.first.id, 'github.com/foo/bar');
+      expect(m2.domain.projects.first.id, 'github.com/foo/bar');
+
+      // project 反向索引增到 2
+      expect(m2.project.domains.toSet(), {'ios', 'apm'});
+    });
+
+    test(
+        'merging the same project back into the first domain after second domain '
+        'does not duplicate either side', () async {
+      final project = _project();
+      final runner = _runnerWith('抽象', '排查-通用.md');
+
+      // ios ← project
+      final m1 = await mergeIntoDomain(
+        domain: _emptyDomain('ios'),
+        project: project,
+        runner: runner,
+      );
+      // apm ← (project with ios ref)
+      final m2 = await mergeIntoDomain(
+        domain: _emptyDomain('apm'),
+        project: m1.project,
+        runner: runner,
+      );
+      // 再次 ios ← (project with ios+apm refs)
+      final m3 = await mergeIntoDomain(
+        domain: m1.domain, // ios domain 已有该 project
+        project: m2.project,
+        runner: runner,
+      );
+
+      // project.domains 仍只有 2
+      expect(m3.project.domains.toSet(), {'ios', 'apm'});
+      // ios domain 的 projects 仍只有 1
+      expect(m3.domain.projects.length, 1);
+    });
+  });
+
+  group('mergeIntoDomain — notes append', () {
+    test('distill notes appended to existing domain notes with separator',
+        () async {
+      const existing = DomainExpertise(
+        domain: 'ios',
+        notes: '已有 L2',
+      );
+      final runner = _runnerWith('新抽象', '排查-X.md');
+
+      final out = await mergeIntoDomain(
+        domain: existing,
+        project: _project(),
+        runner: runner,
+      );
+
+      expect(out.domain.notes, contains('已有 L2'));
+      expect(out.domain.notes, contains('新抽象'));
+      expect(out.domain.notes, contains('---'));
+    });
+
+    test('empty existing notes replaced by distill notes', () async {
+      final runner = _runnerWith('首批抽象', '排查-X.md');
+      final out = await mergeIntoDomain(
+        domain: _emptyDomain('ios'),
+        project: _project(),
+        runner: runner,
+      );
+      expect(out.domain.notes, '首批抽象');
+    });
+  });
+
+  group('mergeIntoDomain — playbooks dedup', () {
+    test('existing + distill playbooks merged by path (no duplicates)', () async {
+      const existing = DomainExpertise(
+        domain: 'ios',
+        playbooks: [
+          MemoryEntry('排查-A.md', 'old A'),
+          MemoryEntry('排查-B.md', 'old B'),
+        ],
+      );
+      // distill 又吐出一个 A（同 path，新 content）+ 一个 C（新 path）
       final runner = FakeRunner(
         (dir, t) => '{}',
-        distillResponder: (prompt) =>
-            '{"domainNotes":"抽象","playbooks":'
-            '[{"path":"排查-通用.md","content":"通用步骤"}]}',
+        distillResponder: (prompt) => '{"domainNotes":"n",'
+            '"playbooks":['
+            '{"path":"排查-A.md","content":"new A"},'
+            '{"path":"排查-C.md","content":"C"}'
+            ']}',
       );
 
-      final d1 = await mergeIntoDomain(
-        domain: _emptyDomain(),
-        project: projectA,
+      final out = await mergeIntoDomain(
+        domain: existing,
+        project: _project(),
         runner: runner,
-        version: 1,
       );
-      final d2 = await mergeIntoDomain(
-        domain: d1,
-        project: projectB,
+
+      // A 保留旧版（已存在不覆盖），B 还在，C 新加 → 3 条
+      expect(out.domain.playbooks.length, 3);
+      final paths = out.domain.playbooks.map((p) => p.path).toSet();
+      expect(paths, {'排查-A.md', '排查-B.md', '排查-C.md'});
+      // A 内容保留旧版
+      final a = out.domain.playbooks.firstWhere((p) => p.path == '排查-A.md');
+      expect(a.content, 'old A');
+    });
+  });
+
+  group('mergeIntoDomain — project summary', () {
+    test('uses role or displayName or projectId as summary', () async {
+      final runner = _runnerWith('n', 'p.md');
+      // role='iOS APM' 应作为 summary
+      final p = _project();
+      final out = await mergeIntoDomain(
+        domain: _emptyDomain('ios'),
+        project: p,
         runner: runner,
-        version: 2,
       );
-
-      // projects grew to 2
-      expect(d2.memory.projects.length, 2);
-      expect(d2.memory.projects[0].id, 'github.com/foo/bar');
-      expect(d2.memory.projects[1].id, 'github.com/x/y');
-      expect(d2.memory.projects[1].summary, '网络库');
-
-      // learnedProjectIds has 2
-      expect(d2.meta.learnedProjectIds.length, 2);
-      expect(d2.meta.learnedProjectIds,
-          containsAll(['github.com/foo/bar', 'github.com/x/y']));
-
-      // playbooks deduped by path → only 1
-      expect(d2.memory.playbooks.length, 1);
-      expect(d2.memory.playbooks.first.path, '排查-通用.md');
+      // ProjectCompetence 没有独立的 role/displayName 字段——summary 回退到 projectId
+      expect(out.domain.projects.first.summary, 'github.com/foo/bar');
+      expect(out.domain.projects.first.id, 'github.com/foo/bar');
     });
   });
 }

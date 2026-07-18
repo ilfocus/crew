@@ -1,47 +1,53 @@
 // crew_core/lib/src/expert/merger.dart
-import '../models/expert.dart';
-import '../runner/runner.dart';
+import '../models/domain_expertise.dart';
+import '../models/expert.dart' show MemoryEntry, ProjectRef;
+import '../models/project_competence.dart';
 import '../runner/distill_parser.dart';
+import '../runner/runner.dart';
 
-/// 把一个 [project] Expert（L1）蒸馏并合并进 [domain] Expert（L2）。
+/// 蒸馏并合并结果：返回更新后的 [domain] 与反向索引已更新的 [project]。
+class MergeOutcome {
+  final DomainExpertise domain;
+  final ProjectCompetence project;
+  const MergeOutcome(this.domain, this.project);
+}
+
+/// 把某 agent 的一个 [ProjectCompetence]（L1）蒸馏并并入其某个 [DomainExpertise]（L2）。
 ///
 /// 流程：
-/// 1. 用 project 的 L1 memory（solved + playbooks + notes）构造 distill prompt
-/// 2. 调用 [runner.distill] 拿到 L2 抽象
-/// 3. 用 [parseDistill] 解析为 [DistillResult]
-/// 4. 把结果合并进 domain：
-///    - notes 追加 distillResult.domainNotes
-///    - playbooks 按 path 去重后追加
-///    - projects 按 id 去重后追加 ProjectRef(projectId, summary)
-///    - learnedProjectIds 按 id 去重后追加 projectId
+/// 1. 用 project 的 L1 memory（notes + solved + playbooks）构造 distill prompt
+/// 2. 调用 [runner.distill] 拿到 L2 抽象（[DistillResult]）
+/// 3. 合并进 domain：
+///    - notes 追加 distill.domainNotes（空则保留原）
+///    - playbooks 按 path 去重后追加（已存在不覆盖）
+///    - projects 按 id 去重追加 [ProjectRef]（幂等）
+/// 4. 同步把 domain 名加入 project.domains（反向索引，去重）
 ///
-/// 幂等性：即使 projectId 已在 learnedProjectIds 中，仍会执行 distill
-/// （可能产出新的 playbooks），但 projects/learnedProjectIds 不会重复增长。
-Future<Expert> mergeIntoDomain({
-  required Expert domain,
-  required Expert project,
+/// **多对多**：一个 project 可被并入多个 domain → 各 domain 的 `projects` 都含它，
+/// `project.domains` 反向含所有并入过的 domain。
+///
+/// 幂等性：即便 projectId 已在 domain.projects 中，仍会执行 distill（可能产出
+/// 新 playbooks），但 projects/domains 不会重复增长。
+Future<MergeOutcome> mergeIntoDomain({
+  required DomainExpertise domain,
+  required ProjectCompetence project,
   required Runner runner,
-  required int version,
 }) async {
   final prompt = _buildDistillPrompt(project);
   final result = await runner.distill(prompt: prompt);
   final distill = parseDistill(result.rawOutput);
 
-  final projectId = project.meta.projectId;
-  final projectSummary = _projectSummary(project);
-
-  // --- 合并 notes（追加，不做去重；distill 输出本身应当是抽象的） ---
-  final mergedNotes = domain.memory.notes.isEmpty
+  // --- notes 追加（distill 输出本身已抽象） ---
+  final mergedNotes = domain.notes.isEmpty
       ? distill.domainNotes
       : (distill.domainNotes.isEmpty
-          ? domain.memory.notes
-          : '${domain.memory.notes}\n\n---\n\n${distill.domainNotes}');
+          ? domain.notes
+          : '${domain.notes}\n\n---\n\n${distill.domainNotes}');
 
-  // --- 合并 playbooks（按 path 去重，新的覆盖旧的语义但保留首次出现位置） ---
-  // 策略：保留 domain 已有 + 追加 distill 中 path 不存在的项
+  // --- playbooks 按 path 去重（已存在不覆盖） ---
   final existingPaths = <String>{};
   final mergedPlaybooks = <MemoryEntry>[];
-  for (final pb in domain.memory.playbooks) {
+  for (final pb in domain.playbooks) {
     if (existingPaths.add(pb.path)) {
       mergedPlaybooks.add(pb);
     }
@@ -52,76 +58,86 @@ Future<Expert> mergeIntoDomain({
     }
   }
 
-  // --- 合并 projects（按 id 去重） ---
+  // --- projects 按 id 去重追加 ---
   final existingProjectIds = <String>{};
   final mergedProjects = <ProjectRef>[];
-  for (final p in domain.memory.projects) {
+  for (final p in domain.projects) {
     if (existingProjectIds.add(p.id)) {
       mergedProjects.add(p);
     }
   }
+  final projectId = project.projectId;
   if (projectId.isNotEmpty && !existingProjectIds.contains(projectId)) {
-    mergedProjects.add(ProjectRef(projectId, projectSummary));
-    existingProjectIds.add(projectId);
+    mergedProjects.add(ProjectRef(projectId, _projectSummary(project)));
   }
 
-  // --- 合并 learnedProjectIds（按 id 去重） ---
-  final mergedLearned = <String>[...domain.meta.learnedProjectIds];
-  if (projectId.isNotEmpty && !mergedLearned.contains(projectId)) {
-    mergedLearned.add(projectId);
+  // --- project.domains 反向索引（去重追加） ---
+  final updatedDomains = <String>[...project.domains];
+  if (domain.domain.isNotEmpty && !updatedDomains.contains(domain.domain)) {
+    updatedDomains.add(domain.domain);
   }
 
-  return Expert(
-    kind: ExpertKind.domain,
+  final updatedDomain = DomainExpertise(
     domain: domain.domain,
-    spec: domain.spec,
-    memory: ExpertMemory(
-      index: domain.memory.index,
-      notes: mergedNotes,
-      solved: domain.memory.solved,
-      playbooks: mergedPlaybooks,
-      projects: mergedProjects,
-    ),
-    meta: ExpertMeta(
-      source: domain.meta.source,
-      github: domain.meta.github,
-      retention: domain.meta.retention,
-      projectId: domain.meta.projectId,
-      version: version,
-      learnedProjectIds: mergedLearned,
-    ),
+    notes: mergedNotes,
+    principles: domain.principles,
+    playbooks: mergedPlaybooks,
+    projects: mergedProjects,
   );
+  final updatedProject = ProjectCompetence(
+    projectId: project.projectId,
+    repos: project.repos,
+    coordinates: project.coordinates,
+    moduleStructure: project.moduleStructure,
+    keyFiles: project.keyFiles,
+    dataflow: project.dataflow,
+    techStack: project.techStack,
+    sdks: project.sdks,
+    difficulties: project.difficulties,
+    github: project.github,
+    source: project.source,
+    retention: project.retention,
+    notes: project.notes,
+    solved: project.solved,
+    playbooks: project.playbooks,
+    domains: updatedDomains,
+  );
+  return MergeOutcome(updatedDomain, updatedProject);
 }
 
-String _buildDistillPrompt(Expert project) {
+String _buildDistillPrompt(ProjectCompetence project) {
   final sb = StringBuffer()
-    ..writeln('请把下面这个项目专家的 L1 记忆抽象为领域级（L2）笔记与 playbooks。')
+    ..writeln('请把下面这个项目的 L1 记忆抽象为领域级（L2）笔记与 playbooks。')
     ..writeln('输出 JSON：{"domainNotes": String, "playbooks": [{"path": String, "content": String}]}')
     ..writeln()
-    ..writeln('## 项目角色')
-    ..writeln(project.spec.role.isNotEmpty ? project.spec.role : '(未填写)')
+    ..writeln('## 项目坐标')
+    ..writeln(project.coordinates.isEmpty ? '(未填写)' : project.coordinates)
+    ..writeln()
+    ..writeln('## 模块结构')
+    ..writeln(project.moduleStructure.isEmpty
+        ? '(未填写)'
+        : project.moduleStructure)
     ..writeln()
     ..writeln('## 技术栈')
-    ..writeln(project.spec.techStack.isEmpty
-        ? '(未填写)'
-        : project.spec.techStack.join(', '))
+    ..writeln(
+        project.techStack.isEmpty ? '(未填写)' : project.techStack.join(', '))
     ..writeln()
     ..writeln('## 重难点')
-    ..writeln(project.spec.difficulties.isEmpty
+    ..writeln(project.difficulties.isEmpty
         ? '(未填写)'
-        : project.spec.difficulties.join('\n- '))
+        : project.difficulties.join('\n- '))
     ..writeln();
 
   sb
     ..writeln('## L1 notes')
-    ..writeln(project.memory.notes.isEmpty ? '(空)' : project.memory.notes)
+    ..writeln(project.notes.isEmpty ? '(空)' : project.notes)
     ..writeln();
 
   sb..writeln('## solved entries')..writeln();
-  if (project.memory.solved.isEmpty) {
+  if (project.solved.isEmpty) {
     sb.writeln('(空)');
   } else {
-    for (final s in project.memory.solved) {
+    for (final s in project.solved) {
       sb.writeln('- path: ${s.path}');
       sb.writeln('  content: ${s.content}');
     }
@@ -129,10 +145,10 @@ String _buildDistillPrompt(Expert project) {
   sb.writeln();
 
   sb..writeln('## existing playbooks')..writeln();
-  if (project.memory.playbooks.isEmpty) {
+  if (project.playbooks.isEmpty) {
     sb.writeln('(空)');
   } else {
-    for (final p in project.memory.playbooks) {
+    for (final p in project.playbooks) {
       sb.writeln('- path: ${p.path}');
       sb.writeln('  content: ${p.content}');
     }
@@ -141,8 +157,7 @@ String _buildDistillPrompt(Expert project) {
   return sb.toString();
 }
 
-String _projectSummary(Expert project) {
-  if (project.spec.role.isNotEmpty) return project.spec.role;
-  if (project.spec.displayName.isNotEmpty) return project.spec.displayName;
-  return project.meta.projectId;
+String _projectSummary(ProjectCompetence project) {
+  // ProjectCompetence 没有独立的 role/displayName 字段——回退到 projectId。
+  return project.projectId;
 }
