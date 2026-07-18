@@ -21,12 +21,14 @@ class _PublishDialogState extends State<PublishDialog> {
   String? _agentName;
   String _retention = 'experience-only';
   String _source = 'opensource';
+  final _agentIdCtrl = TextEditingController();
   final _domainCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
+    _agentIdCtrl.dispose();
     _domainCtrl.dispose();
     super.dispose();
   }
@@ -36,12 +38,18 @@ class _PublishDialogState extends State<PublishDialog> {
       setState(() => _error = '请选择 agent');
       return;
     }
+    final agentId = _agentIdCtrl.text.trim();
+    if (agentId.isEmpty) {
+      setState(() => _error = '请填写 agent id');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     final domainText = _domainCtrl.text.trim();
     final outcome = await widget.service.publish(
+      agentId: agentId,
       workspacePath: widget.workspacePath,
       agentName: _agentName!,
       retention: _retention,
@@ -88,6 +96,15 @@ class _PublishDialogState extends State<PublishDialog> {
                     .map((n) => DropdownMenuItem(value: n, child: Text(n)))
                     .toList(),
                 onChanged: (v) => setState(() => _agentName = v),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _agentIdCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Agent ID *',
+                  border: OutlineInputBorder(),
+                  hintText: '如 ios-lin（池中本 agent 的稳定标识）',
+                ),
               ),
               const SizedBox(height: 16),
               _SectionLabel(text: '保留策略'),

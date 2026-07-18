@@ -113,34 +113,35 @@ class WorkspaceBrowser {
   }
 }
 
-/// 浏览专家池中某个专家目录下的 markdown 文件。
+/// 浏览专家池中某个 agent 目录下的 markdown 文件。
 ///
-/// 专家目录结构（由 ExpertPoolAdapter 生成）：
-/// - expert.json
-/// - IDENTITY.md
-/// - COMPETENCE.md
-/// - memory/MEMORY.md
-/// - memory/solved/*.md
-/// - memory/playbooks/*.md
-/// - memory/project-notes.md (项目专家) / memory/domain-notes.md (领域专家)
-/// - memory/projects.md (领域专家)
+/// Agent 目录结构（由 AgentPoolAdapter 生成，spec §3）：
+/// - agent.json（事实源：core + memory + meta）
+/// - IDENTITY.md / RELATIONSHIPS.md / TOOLS.md（视图）
+/// - memory/MEMORY.md、memory/short-term.md、memory/long-term/*
+/// - domains/<d>/domain.json + EXPERTISE.md + playbooks/* + projects.md
+/// - projects/<p>/project.json + COMPETENCE.md + memory/project-notes.md +
+///   memory/solved/* + memory/playbooks/*
 class ExpertPoolBrowser {
   final Directory expertDir;
   ExpertPoolBrowser(this.expertDir);
 
-  /// 读取 expert.json。文件不存在返回 null。
-  Expert? loadExpert() {
-    final f = File(p.join(expertDir.path, 'expert.json'));
+  /// 读取 agent.json 解析为 [AgentProfile]。文件不存在返回 null。
+  AgentProfile? loadAgent() {
+    final f = File(p.join(expertDir.path, 'agent.json'));
     if (!f.existsSync()) return null;
     try {
       final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-      return Expert.fromJson(json);
+      return AgentProfile.fromJson(json);
     } catch (_) {
       return null;
     }
   }
 
-  /// 列出该专家目录下所有 markdown 文件。
+  /// 列出该 agent 目录下所有 markdown 文件（按分组组织）。
+  ///
+  /// 扫描顺序：身份与能力 → 记忆 → 领域 → 项目。
+  /// 文件不存在的条目会被跳过。
   List<MarkdownFileEntry> listFiles() {
     final entries = <MarkdownFileEntry>[];
 
@@ -156,47 +157,109 @@ class ExpertPoolBrowser {
       }
     }
 
+    void addDirIfExists(String rel, String labelPrefix, String group) {
+      final dir = Directory(p.join(expertDir.path, rel));
+      if (!dir.existsSync()) return;
+      for (final e in dir.listSync()) {
+        if (e is! File) continue;
+        if (!e.path.endsWith('.md')) continue;
+        final base = p.basename(e.path);
+        entries.add(MarkdownFileEntry(
+          relativePath: '$rel/$base',
+          absolutePath: e.path,
+          label: '$labelPrefix$base',
+          group: group,
+        ));
+      }
+    }
+
     // 身份与能力
     addIfExists('IDENTITY.md', 'IDENTITY.md', '身份与能力');
-    addIfExists('COMPETENCE.md', 'COMPETENCE.md', '身份与能力');
+    addIfExists('RELATIONSHIPS.md', 'RELATIONSHIPS.md', '身份与能力');
+    addIfExists('TOOLS.md', 'TOOLS.md', '身份与能力');
 
-    // 记忆文档
+    // Agent 本体记忆
     addIfExists('memory/MEMORY.md', 'MEMORY.md', '记忆');
-    addIfExists('memory/project-notes.md', 'project-notes.md', '记忆');
-    addIfExists('memory/domain-notes.md', 'domain-notes.md', '记忆');
-    addIfExists('memory/projects.md', 'projects.md', '记忆');
+    addIfExists('memory/short-term.md', 'short-term.md', '记忆');
+    addDirIfExists('memory/long-term', 'long-term/', '记忆');
 
-    // solved 子目录
-    final solvedDir = Directory(p.join(expertDir.path, 'memory', 'solved'));
-    if (solvedDir.existsSync()) {
-      for (final e in solvedDir.listSync()) {
-        if (e is! File) continue;
-        final base = p.basename(e.path);
-        entries.add(MarkdownFileEntry(
-          relativePath: 'memory/solved/$base',
-          absolutePath: e.path,
-          label: 'solved/$base',
-          group: '记忆',
-        ));
+    // 领域（每个 domain 一个子目录）
+    final domainsDir = Directory(p.join(expertDir.path, 'domains'));
+    if (domainsDir.existsSync()) {
+      for (final d in domainsDir.listSync()) {
+        if (d is! Directory) continue;
+        final dname = p.basename(d.path);
+        final group = '领域：$dname';
+        addIfExists('domains/$dname/EXPERTISE.md', '$dname/EXPERTISE.md', group);
+        addIfExists('domains/$dname/projects.md', '$dname/projects.md', group);
+        addDirIfExists('domains/$dname/playbooks', '$dname/playbooks/', group);
       }
     }
 
-    // playbooks 子目录
-    final playbooksDir =
-        Directory(p.join(expertDir.path, 'memory', 'playbooks'));
-    if (playbooksDir.existsSync()) {
-      for (final e in playbooksDir.listSync()) {
-        if (e is! File) continue;
-        final base = p.basename(e.path);
-        entries.add(MarkdownFileEntry(
-          relativePath: 'memory/playbooks/$base',
-          absolutePath: e.path,
-          label: 'playbooks/$base',
-          group: '记忆',
-        ));
-      }
+    // 项目（每个 project 一个子目录；projectId 可能含斜杠 → 嵌套目录）
+    final projectsDir = Directory(p.join(expertDir.path, 'projects'));
+    if (projectsDir.existsSync()) {
+      _scanProjects(projectsDir, projectsDir, entries);
     }
+
     return entries;
+  }
+
+  /// 递归扫描 projects/ 目录树，找所有含 project.json 的目录视作 project 根。
+  /// projectId 是相对 projects/ 的相对路径（去掉前导 /）。
+  void _scanProjects(
+    Directory current,
+    Directory projectsRoot,
+    List<MarkdownFileEntry> entries,
+  ) {
+    final projectJson = File(p.join(current.path, 'project.json'));
+    if (projectJson.existsSync()) {
+      final rel = p.relative(current.path, from: projectsRoot.path);
+      final group = '项目：$rel';
+      _addProjectFiles(rel, group, entries);
+      // project 的子目录里可能还有 nested projects（极少见），继续扫描
+    }
+    for (final e in current.listSync()) {
+      if (e is Directory) _scanProjects(e, projectsRoot, entries);
+    }
+  }
+
+  void _addProjectFiles(
+    String rel,
+    String group,
+    List<MarkdownFileEntry> entries,
+  ) {
+    void addIfExists(String subRel, String label) {
+      final f = File(p.join(expertDir.path, 'projects', rel, subRel));
+      if (!f.existsSync()) return;
+      entries.add(MarkdownFileEntry(
+        relativePath: 'projects/$rel/$subRel',
+        absolutePath: f.path,
+        label: label,
+        group: group,
+      ));
+    }
+
+    void addDirIfExists(String subRel, String labelPrefix) {
+      final dir = Directory(p.join(expertDir.path, 'projects', rel, subRel));
+      if (!dir.existsSync()) return;
+      for (final e in dir.listSync()) {
+        if (e is! File) continue;
+        if (!e.path.endsWith('.md')) continue;
+        final base = p.basename(e.path);
+        entries.add(MarkdownFileEntry(
+          relativePath: 'projects/$rel/$subRel/$base',
+          absolutePath: e.path,
+          label: '$labelPrefix$base',
+          group: group,
+        ));
+      }
+    }
+
+    addIfExists('COMPETENCE.md', '$rel/COMPETENCE.md');
+    addIfExists('memory/project-notes.md', '$rel/project-notes.md');
+    addDirIfExists('memory/solved', '$rel/solved/');
+    addDirIfExists('memory/playbooks', '$rel/playbooks/');
   }
 }
 

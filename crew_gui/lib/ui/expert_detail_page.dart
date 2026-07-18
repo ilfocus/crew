@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 import '../services/workspace_browser.dart';
 import 'widgets/markdown_file_viewer.dart';
 
-/// 专家池中某个专家的详情页：显示该专家的 spec 元信息 + md 文件列表与内容。
+/// 专家池中某个 agent 的详情页：显示该 agent 的 core 身份信息 + 全量 markdown 文件列表。
 ///
-/// 用于「项目专家」点击查看详情。专家目录结构由 ExpertPoolAdapter 生成：
-/// IDENTITY.md / COMPETENCE.md / memory/*.md / memory/solved/* / memory/playbooks/*
+/// 用于 agent 卡片点击查看详情。Agent 目录结构由 AgentPoolAdapter 生成（spec §3）：
+/// - agent.json（事实源：core + memory + meta）
+/// - IDENTITY.md / RELATIONSHIPS.md / TOOLS.md（视图）
+/// - memory/MEMORY.md、memory/short-term.md、memory/long-term/*
+/// - domains/<d>/EXPERTISE.md + projects.md + playbooks/*
+/// - projects/<p>/COMPETENCE.md + memory/project-notes.md + memory/solved/* + memory/playbooks/*
 class ExpertDetailPage extends StatefulWidget {
   final String title;
   final Directory expertDir;
@@ -27,13 +31,13 @@ class ExpertDetailPage extends StatefulWidget {
 
 class _ExpertDetailPageState extends State<ExpertDetailPage> {
   late final ExpertPoolBrowser _browser;
-  Expert? _expert;
+  AgentProfile? _agent;
 
   @override
   void initState() {
     super.initState();
     _browser = ExpertPoolBrowser(widget.expertDir);
-    _expert = _browser.loadExpert();
+    _agent = _browser.loadAgent();
   }
 
   @override
@@ -54,7 +58,7 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
             icon: const Icon(Icons.refresh_rounded),
             tooltip: '刷新',
             onPressed: () => setState(() {
-              _expert = _browser.loadExpert();
+              _agent = _browser.loadAgent();
             }),
           ),
         ],
@@ -62,11 +66,11 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_expert != null) _buildHeader(theme, _expert!),
+          if (_agent != null) _buildHeader(theme, _agent!),
           Expanded(
             child: MarkdownFileViewer(
               entries: _browser.listFiles(),
-              emptyHint: '该专家目录下没有 markdown 文件',
+              emptyHint: '该 agent 目录下没有 markdown 文件',
             ),
           ),
         ],
@@ -74,15 +78,12 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
     );
   }
 
-  Widget _buildHeader(ThemeData theme, Expert e) {
-    final spec = e.spec;
-    final initial = spec.displayName.isNotEmpty
-        ? spec.displayName.characters.first
+  Widget _buildHeader(ThemeData theme, AgentProfile a) {
+    final c = a.core;
+    final initial = c.displayName.isNotEmpty
+        ? c.displayName.characters.first
         : '?';
-    final isProject = e.kind == ExpertKind.project;
-    final idLabel = isProject
-        ? '项目专家 · ${e.meta.projectId}'
-        : '领域专家 · ${e.domain}';
+    final idLabel = 'id: ${c.id} · v${a.meta.version}';
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
       decoration: BoxDecoration(
@@ -97,18 +98,14 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: isProject
-                  ? theme.colorScheme.secondaryContainer
-                  : theme.colorScheme.primaryContainer,
+              color: theme.colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
             child: Text(
               initial.toUpperCase(),
               style: TextStyle(
-                color: isProject
-                    ? theme.colorScheme.secondary
-                    : theme.colorScheme.primary,
+                color: theme.colorScheme.primary,
                 fontWeight: FontWeight.w700,
                 fontSize: 16,
               ),
@@ -124,30 +121,31 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
                   children: [
                     Flexible(
                       child: Text(
-                        spec.displayName,
+                        c.displayName,
                         style: theme.textTheme.titleSmall
                             ?.copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer
-                            .withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        spec.role,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontSize: 10,
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
+                    if (c.role.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          c.role,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -159,10 +157,10 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (spec.personality.isNotEmpty) ...[
+                if (c.personality.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '人格：${spec.personality}',
+                    '人格：${c.personality}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                       fontSize: 11,

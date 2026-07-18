@@ -116,7 +116,7 @@ class _AppScaffoldState extends State<AppScaffold> {
     });
   }
 
-  void _openExpert(ExpertSummary summary, Directory expertDir) {
+  void _openExpert(AgentSummary summary, Directory expertDir) {
     setState(() {
       _expertDetail = _ExpertDetailView(
         title: summary.displayName,
