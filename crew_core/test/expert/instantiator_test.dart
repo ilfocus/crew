@@ -2,75 +2,84 @@
 import 'package:crew_core/crew_core.dart';
 import 'package:test/test.dart';
 
-Expert _domainExpert() => const Expert(
-      kind: ExpertKind.domain,
+AgentCore _core() => const AgentCore(
+      id: 'ios-lin',
+      name: 'ios-domain',
+      displayName: 'iOS 领域专家',
+      role: 'iOS 领域工程师',
+      personality: '严谨',
+      principles: ['不引入未测试依赖'],
+      relationships: '',
+      tools: ['mcp__foo', 'skill__bar'],
+    );
+
+AgentCore _coreNoTools() => const AgentCore(
+      id: 'ios-lin',
+      name: 'ios-domain',
+      displayName: 'iOS 领域专家',
+      role: 'iOS 领域工程师',
+      personality: '严谨',
+      principles: ['不引入未测试依赖'],
+    );
+
+DomainExpertise _domain() => const DomainExpertise(
       domain: 'ios',
-      spec: AgentSpec(
-        name: 'ios-domain',
-        displayName: 'iOS 领域专家',
-        repos: [],
-        role: 'iOS 领域工程师',
-        coordinates: '',
-        moduleStructure: '',
-        keyFiles: [],
-        dataflow: '',
-        memoryConvention: '',
-        conventions: [],
-        personality: '严谨',
-        principles: ['不引入未测试依赖'],
-        techStack: ['Swift', 'SwiftUI'],
-        sdks: ['SensorsSDK'],
-        difficulties: ['线程安全'],
-      ),
-      memory: ExpertMemory(
-        index: '# DOMAIN MEMORY',
-        notes: 'L2 domain notes',
-        solved: [MemoryEntry('solved/should-not-carry.md', 'private fix')],
-        playbooks: [
-          MemoryEntry('排查-内存泄漏.md', '1. Instruments 2. 看堆'),
-          MemoryEntry('playbooks/线程.md', '注意主线程'),
-        ],
-        projects: [
-          ProjectRef('github.com/foo/bar', 'iOS APM SDK'),
-          ProjectRef('github.com/x/y', 'iOS networking'),
-        ],
-      ),
-      meta: ExpertMeta(
-        source: 'opensource',
-        github: '',
-        retention: 'experience-only',
-        version: 1,
-        learnedProjectIds: ['github.com/foo/bar', 'github.com/x/y'],
-      ),
+      notes: 'L2 domain notes',
+      principles: ['L2 principle'],
+      playbooks: [
+        MemoryEntry('排查-内存泄漏.md', '1. Instruments 2. 看堆'),
+        MemoryEntry('playbooks/线程.md', '注意主线程'),
+      ],
+      projects: [
+        ProjectRef('github.com/foo/bar', 'iOS APM SDK'),
+        ProjectRef('github.com/x/y', 'iOS networking'),
+      ],
     );
 
 void main() {
   group('instantiate — spec', () {
-    test('brings domain personality/principles/techStack; sets name and repos',
-        () {
+    test('brings core personality/principles/role; sets name and repos', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: ['~/newproj/ios'],
       );
 
       expect(r.spec.name, 'ios-newproj');
       expect(r.spec.repos, ['~/newproj/ios']);
-
-      // transferable fields preserved from domain
       expect(r.spec.personality, '严谨');
       expect(r.spec.principles, ['不引入未测试依赖']);
-      expect(r.spec.techStack, ['Swift', 'SwiftUI']);
-      expect(r.spec.sdks, ['SensorsSDK']);
-      expect(r.spec.difficulties, ['线程安全']);
       expect(r.spec.role, 'iOS 领域工程师');
+      expect(r.spec.displayName, 'iOS 领域专家');
+    });
+
+    test('does NOT carry L1 specifics: keyFiles/coordinates/techStack/sdks', () {
+      final r = instantiate(
+        core: _core(),
+        domain: _domain(),
+        agentName: 'ios-newproj',
+        newRepos: ['~/newproj/ios'],
+      );
+
+      // L1 specifics not carried over from anywhere
+      expect(r.spec.keyFiles, isEmpty);
+      expect(r.spec.coordinates, '');
+      expect(r.spec.moduleStructure, '');
+      expect(r.spec.dataflow, '');
+      // techStack/sdks/difficulties are not in DomainExpertise → leave empty
+      expect(r.spec.techStack, isEmpty);
+      expect(r.spec.sdks, isEmpty);
+      expect(r.spec.difficulties, isEmpty);
     });
   });
 
   group('instantiate — memorySeed', () {
-    test('contains MEMORY.md, domain-notes.md, playbooks, projects.md', () {
+    test('contains MEMORY.md, domain-notes.md, playbooks, projects.md, TOOLS.md',
+        () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: ['~/newproj/ios'],
       );
@@ -82,38 +91,39 @@ void main() {
       expect(paths, contains('memory/ios-newproj/playbooks/排查-内存泄漏.md'));
       expect(paths, contains('memory/ios-newproj/playbooks/线程.md'));
       expect(paths, contains('memory/ios-newproj/projects.md'));
+      expect(paths, contains('memory/ios-newproj/TOOLS.md'));
     });
 
-    test('MEMORY.md uses domain.memory.index when provided', () {
+    test('TOOLS.md omitted when core.tools is empty', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _coreNoTools(),
+        domain: _domain(),
+        agentName: 'ios-newproj',
+        newRepos: [],
+      );
+
+      final paths = r.memorySeed.map((f) => f.relativePath).toList();
+      expect(paths.any((p) => p.endsWith('TOOLS.md')), isFalse);
+    });
+
+    test('MEMORY.md default mentions agent name and domain', () {
+      final r = instantiate(
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
       final mem = r.memorySeed.firstWhere(
         (f) => f.relativePath == 'memory/ios-newproj/MEMORY.md',
       );
-      expect(mem.content, '# DOMAIN MEMORY');
-    });
-
-    test('MEMORY.md falls back to default when index empty', () {
-      final domain = _domainExpert();
-      // build a copy with empty index using toJson/fromJson round-trip
-      final modified = Expert.fromJson(domain.toJson()).copyWithMemoryIndex('');
-      final r = instantiate(
-        domain: modified,
-        agentName: 'agentX',
-        newRepos: [],
-      );
-      final mem = r.memorySeed.firstWhere(
-        (f) => f.relativePath == 'memory/agentX/MEMORY.md',
-      );
-      expect(mem.content, contains('# MEMORY — agentX'));
+      expect(mem.content, contains('ios-newproj'));
+      expect(mem.content, contains('ios'));
     });
 
     test('domain-notes.md has the L2 notes content', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
@@ -125,7 +135,8 @@ void main() {
 
     test('projects.md contains all project refs', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
@@ -140,7 +151,8 @@ void main() {
 
     test('does NOT contain any solved/ entries', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
@@ -153,7 +165,8 @@ void main() {
 
     test('all memorySeed items have isMemory=true', () {
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
@@ -165,10 +178,9 @@ void main() {
     });
 
     test('playbook path prefix is stripped into playbooks/ dir', () {
-      // domain has playbook with path 'playbooks/线程.md' — should be written
-      // as 'memory/<agent>/playbooks/线程.md' (not .../playbooks/playbooks/线程.md)
       final r = instantiate(
-        domain: _domainExpert(),
+        core: _core(),
+        domain: _domain(),
         agentName: 'ios-newproj',
         newRepos: [],
       );
@@ -177,24 +189,19 @@ void main() {
       expect(paths.any((p) => p.contains('playbooks/playbooks/')), isFalse,
           reason: 'should not double-nest playbooks/ prefix');
     });
-  });
-}
 
-/// Helper extension to make a copy of Expert with modified memory.index.
-extension on Expert {
-  Expert copyWithMemoryIndex(String newIndex) {
-    return Expert(
-      kind: kind,
-      domain: domain,
-      spec: spec,
-      memory: ExpertMemory(
-        index: newIndex,
-        notes: memory.notes,
-        solved: memory.solved,
-        playbooks: memory.playbooks,
-        projects: memory.projects,
-      ),
-      meta: meta,
-    );
-  }
+    test('TOOLS.md lists core.tools entries', () {
+      final r = instantiate(
+        core: _core(),
+        domain: _domain(),
+        agentName: 'ios-newproj',
+        newRepos: [],
+      );
+      final tools = r.memorySeed.firstWhere(
+        (f) => f.relativePath == 'memory/ios-newproj/TOOLS.md',
+      );
+      expect(tools.content, contains('mcp__foo'));
+      expect(tools.content, contains('skill__bar'));
+    });
+  });
 }
