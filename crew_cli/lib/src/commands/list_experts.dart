@@ -3,7 +3,10 @@ import 'dart:io';
 
 import 'package:crew_core/crew_core.dart';
 
-/// List experts in the pool, printing a formatted table to [out].
+/// List agents in the pool, printing a formatted table to [out].
+///
+/// 输出按 **agent 层级** 展示（spec §3 新结构）：
+/// - 每行一个 agent，显示 id / displayName / domains 数 / projects 数 / version
 ///
 /// Pass [out] (e.g. a [StringBuffer]) in tests to capture output without
 /// touching real stdout.
@@ -12,22 +15,22 @@ Future<void> runListExperts({
   StringSink? out,
 }) async {
   final sink = out ?? stdout;
-  final pool = ExpertPool(poolDir);
+  final pool = AgentPool(poolDir);
   final summaries = await pool.list();
 
   if (summaries.isEmpty) {
-    sink.writeln('Expert pool is empty.');
+    sink.writeln('Agent pool is empty.');
     return;
   }
 
   // Print table header.
-  sink.writeln(
-      '${'KIND'.padRight(10)} ${'ID/DOMAIN'.padRight(40)} ${'VERSION'}');
-  sink.writeln('${'-' * 10} ${'-' * 40} ${'-' * 7}');
+  sink.writeln('${'AGENT'.padRight(20)} ${'DISPLAY'.padRight(20)} '
+      '${'DOMAINS'.padRight(20)} ${'PROJECTS'.padRight(10)} ${'VERSION'}');
+  sink.writeln('${'-' * 20} ${'-' * 20} ${'-' * 20} ${'-' * 10} ${'-' * 7}');
 
   for (final s in summaries) {
-    final kind = s.kind == ExpertKind.project ? 'project' : 'domain';
-    sink.writeln(
-        '${kind.padRight(10)} ${s.id.padRight(40)} ${s.version}');
+    sink.writeln('${s.id.padRight(20)} ${s.displayName.padRight(20)} '
+        '${s.domains.join(', ').padRight(20)} '
+        '${s.projectCount.toString().padRight(10)} ${s.version}');
   }
 }
