@@ -37,6 +37,7 @@ export 'src/expert/publisher.dart';
 export 'src/expert/redact.dart';
 export 'src/expert/merger.dart';
 export 'src/expert/instantiator.dart';
+export 'src/expert/memory_eviction.dart';
 export 'src/expert/expert_pool_adapter.dart';
 export 'src/expert/agent_pool_adapter.dart';
 export 'src/expert/expert_pool.dart';
