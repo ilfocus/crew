@@ -27,3 +27,7 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Make 运行时文件
+.run.pid
+.run.log

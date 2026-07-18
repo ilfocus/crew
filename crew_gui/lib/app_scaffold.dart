@@ -1,4 +1,6 @@
 // crew_gui/lib/app_scaffold.dart
+import 'dart:io';
+
 import 'package:crew_core/crew_core.dart';
 import 'package:flutter/material.dart';
 import 'models/project_entry.dart';
@@ -9,11 +11,12 @@ import 'services/template_repository.dart';
 import 'services/workspace_opener.dart';
 import 'state/generation_controller.dart';
 import 'state/wizard_controller.dart';
+import 'ui/expert_detail_page.dart';
 import 'ui/expert_pool_page.dart';
 import 'ui/experts_page.dart';
 import 'ui/home_page.dart';
+import 'ui/new_project_page.dart';
 import 'ui/project_detail_page.dart';
-import 'ui/wizard/wizard_page.dart';
 
 class AppScaffold extends StatefulWidget {
   final ProjectStore store;
@@ -45,6 +48,25 @@ const _sidebarExpandedWidth = 240.0;
 const _sidebarCollapsedWidth = 64.0;
 const _sidebarBreakpoint = 720.0;
 
+/// 专家详情视图：当非 null 时覆盖在当前 tab 内容之上，保留左侧菜单。
+class _ExpertDetailView {
+  final String title;
+  final Directory expertDir;
+  _ExpertDetailView({required this.title, required this.expertDir});
+}
+
+/// 专家编辑视图：当非 null 时覆盖在当前 tab 内容之上，保留左侧菜单。
+class _ExpertEditView {
+  final AgentTemplate template;
+  final bool isBuiltinOriginal;
+  final bool isNew;
+  _ExpertEditView({
+    required this.template,
+    required this.isBuiltinOriginal,
+    required this.isNew,
+  });
+}
+
 class _AppScaffoldState extends State<AppScaffold> {
   _NavTab _tab = _NavTab.projects;
   WizardController? _wizard;
@@ -52,6 +74,10 @@ class _AppScaffoldState extends State<AppScaffold> {
   late final ExpertPoolService _poolService;
   // 项目详情视图：当非 null 时覆盖在当前 tab 内容之上
   ProjectEntry? _projectDetail;
+  // 专家池详情视图：当非 null 时覆盖在当前 tab 内容之上，保留左侧菜单
+  _ExpertDetailView? _expertDetail;
+  // 专家编辑视图：当非 null 时覆盖在当前 tab 内容之上，保留左侧菜单
+  _ExpertEditView? _expertEdit;
 
   @override
   void initState() {
@@ -66,6 +92,8 @@ class _AppScaffoldState extends State<AppScaffold> {
       _generation = widget.generationFactory();
       _tab = _NavTab.newProject;
       _projectDetail = null;
+      _expertDetail = null;
+      _expertEdit = null;
     });
   }
 
@@ -75,26 +103,102 @@ class _AppScaffoldState extends State<AppScaffold> {
       _generation = null;
       _tab = _NavTab.projects;
       _projectDetail = null;
+      _expertDetail = null;
+      _expertEdit = null;
     });
   }
 
   void _openProject(ProjectEntry e) {
-    setState(() => _projectDetail = e);
+    setState(() {
+      _projectDetail = e;
+      _expertDetail = null;
+      _expertEdit = null;
+    });
+  }
+
+  void _openExpert(ExpertSummary summary, Directory expertDir) {
+    setState(() {
+      _expertDetail = _ExpertDetailView(
+        title: summary.displayName,
+        expertDir: expertDir,
+      );
+      _projectDetail = null;
+      _expertEdit = null;
+    });
+  }
+
+  void _openExpertEditor(
+      AgentTemplate template, bool isBuiltinOriginal, bool isNew) {
+    setState(() {
+      _expertEdit = _ExpertEditView(
+        template: template,
+        isBuiltinOriginal: isBuiltinOriginal,
+        isNew: isNew,
+      );
+      _projectDetail = null;
+      _expertDetail = null;
+    });
+  }
+
+  /// AI 辅助优化 prompt 的回调（专家列表页与编辑页共用）。
+  Future<String> _aiRefine({
+    required String role,
+    required String currentPrompt,
+    required String instruction,
+  }) async {
+    final runner = CliRunner(tool: widget.cliTool);
+    final prompt = '你是 prompt 优化助手。\n'
+        '当前角色：$role\n'
+        '当前 prompt：\n$currentPrompt\n\n'
+        '用户指令：$instruction\n\n'
+        '请根据用户指令优化上述 prompt，直接输出优化后的完整 prompt，不要输出其他内容。';
+    final result = await runner.probe(
+      workingDir: '.',
+      prompt: prompt,
+      template: const AgentTemplate(
+        id: 'prompt-optimizer', version: 1, defaultName: 'optimizer',
+        displayName: '优化器', role: 'prompt优化',
+        probePrompt: '', matchGlobs: [],
+      ),
+    );
+    if (!result.ok) throw Exception('CLI 返回非零: ${result.exitCode}');
+    return result.rawOutput.trim();
   }
 
   Widget _buildContent() {
+    // 专家编辑视图：在内容区渲染，保留左侧菜单
+    if (_expertEdit != null) {
+      return ExpertEditPage(
+        initial: _expertEdit!.template,
+        repository: widget.templates,
+        isBuiltinOriginal: _expertEdit!.isBuiltinOriginal,
+        isNew: _expertEdit!.isNew,
+        onAiRefine: _aiRefine,
+        onChanged: () {},
+        onBack: () => setState(() => _expertEdit = null),
+      );
+    }
+    // 专家池详情视图：在内容区渲染，保留左侧菜单
+    if (_expertDetail != null) {
+      return ExpertDetailPage(
+        title: _expertDetail!.title,
+        expertDir: _expertDetail!.expertDir,
+        onBack: () => setState(() => _expertDetail = null),
+      );
+    }
     // 项目详情优先级最高
     if (_projectDetail != null) {
       return ProjectDetailPage(
         entry: _projectDetail!,
         opener: widget.opener,
+        onBack: () => setState(() => _projectDetail = null),
       );
     }
     switch (_tab) {
       case _NavTab.newProject:
         _wizard ??= WizardController();
         _generation ??= widget.generationFactory();
-        return WizardPage(
+        return NewProjectPage(
           wizard: _wizard!,
           templates: widget.templates,
           picker: widget.picker,
@@ -106,29 +210,8 @@ class _AppScaffoldState extends State<AppScaffold> {
       case _NavTab.experts:
         return ExpertsPage(
           templates: widget.templates,
-          onAiRefine: ({
-            required String role,
-            required String currentPrompt,
-            required String instruction,
-          }) async {
-            final runner = CliRunner(tool: widget.cliTool);
-            final prompt = '你是 prompt 优化助手。\n'
-                '当前角色：$role\n'
-                '当前 prompt：\n$currentPrompt\n\n'
-                '用户指令：$instruction\n\n'
-                '请根据用户指令优化上述 prompt，直接输出优化后的完整 prompt，不要输出其他内容。';
-            final result = await runner.probe(
-              workingDir: '.',
-              prompt: prompt,
-              template: const AgentTemplate(
-                id: 'prompt-optimizer', version: 1, defaultName: 'optimizer',
-                displayName: '优化器', role: 'prompt优化',
-                probePrompt: '', matchGlobs: [],
-              ),
-            );
-            if (!result.ok) throw Exception('CLI 返回非零: ${result.exitCode}');
-            return result.rawOutput.trim();
-          },
+          onAiRefine: _aiRefine,
+          onOpenEditor: _openExpertEditor,
         );
       case _NavTab.projects:
         return HomePage(
@@ -138,7 +221,10 @@ class _AppScaffoldState extends State<AppScaffold> {
           expertPoolService: _poolService,
         );
       case _NavTab.pool:
-        return ExpertPoolPage(service: _poolService);
+        return ExpertPoolPage(
+          service: _poolService,
+          onOpenExpert: _openExpert,
+        );
     }
   }
 
@@ -149,8 +235,14 @@ class _AppScaffoldState extends State<AppScaffold> {
         builder: (context, constraints) {
           // 响应式：宽窗展开侧边栏，窄窗折叠为图标轨
           final expanded = constraints.maxWidth > _sidebarBreakpoint;
-          // 侧栏选中态：当在项目详情页时高亮「项目」
-          final activeTab = _projectDetail != null ? _NavTab.projects : _tab;
+          // 侧栏选中态：在详情视图中高亮对应的来源 tab
+          final activeTab = _projectDetail != null
+              ? _NavTab.projects
+              : _expertDetail != null
+                  ? _NavTab.pool
+                  : _expertEdit != null
+                      ? _NavTab.experts
+                      : _tab;
           return Row(
             children: [
               _Sidebar(
@@ -161,6 +253,8 @@ class _AppScaffoldState extends State<AppScaffold> {
                 onSelect: (t) {
                   setState(() {
                     _projectDetail = null;
+                    _expertDetail = null;
+                    _expertEdit = null;
                     _tab = t;
                   });
                 },

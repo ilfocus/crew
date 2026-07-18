@@ -9,8 +9,42 @@ abstract class WorkspaceOpener {
 class ProcessWorkspaceOpener implements WorkspaceOpener {
   @override
   Future<void> openWithTool(String tool, String workspacePath) async {
-    // 在工作空间目录内拉起 CLI（新会话由用户在终端接管；此处仅启动）。
-    await Process.start(tool, const [], workingDirectory: workspacePath);
+    if (Platform.isMacOS) {
+      // 用 osascript 让 Terminal.app 开新窗口并执行 tool。
+      // 直接 Process.start 拉起 CLI 会因无 TTY 导致 TUI 程序（如 claude）看不到任何输出。
+      final escapedPath = workspacePath.replaceAll("'", "'\\''");
+      final shellCmd = "cd '$escapedPath' && $tool; exec \$SHELL";
+      // AppleScript 字符串里转义双引号和反斜杠
+      final applesafe =
+          shellCmd.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+      await Process.start(
+        'osascript',
+        ['-e', 'tell application "Terminal" to do script "$applesafe"'],
+      );
+      // 把 Terminal 拉到前台
+      await Process.start('open', ['-a', 'Terminal']);
+      return;
+    }
+    if (Platform.isWindows) {
+      // start cmd /k "cd /d PATH && tool"——避免嵌套双引号
+      await Process.start(
+        'cmd',
+        ['/c', 'start', 'cmd', '/k', 'cd /d $workspacePath && $tool'],
+      );
+      return;
+    }
+    // Linux: 尝试 x-terminal-emulator（Debian 系默认软链）或常见终端
+    final escapedPath = workspacePath.replaceAll("'", "'\\''");
+    final shellCmd = "cd '$escapedPath' && $tool; exec \$SHELL";
+    try {
+      await Process.start(
+        'x-terminal-emulator',
+        ['-e', 'bash', '-c', shellCmd],
+      );
+    } on ProcessException {
+      // 退而求其次：直接启动 CLI（无 TTY，至少不阻塞）
+      await Process.start(tool, const [], workingDirectory: workspacePath);
+    }
   }
 
   @override

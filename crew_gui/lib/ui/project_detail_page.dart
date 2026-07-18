@@ -12,10 +12,13 @@ import 'widgets/markdown_file_viewer.dart';
 class ProjectDetailPage extends StatefulWidget {
   final ProjectEntry entry;
   final WorkspaceOpener opener;
+  /// 返回项目列表的回调；为 null 时不显示返回按钮（例如被 Navigator 推入时由 leading 自动处理）。
+  final VoidCallback? onBack;
   const ProjectDetailPage({
     super.key,
     required this.entry,
     required this.opener,
+    this.onBack,
   });
 
   @override
@@ -59,6 +62,13 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: '返回项目列表',
+                onPressed: widget.onBack,
+              )
+            : null,
         title: Text(widget.entry.name),
         actions: [
           IconButton(

@@ -12,10 +12,13 @@ import 'widgets/markdown_file_viewer.dart';
 class ExpertDetailPage extends StatefulWidget {
   final String title;
   final Directory expertDir;
+  /// 返回专家池的回调；为 null 时不显示返回按钮（例如被 Navigator 推入时由 leading 自动处理）。
+  final VoidCallback? onBack;
   const ExpertDetailPage({
     super.key,
     required this.title,
     required this.expertDir,
+    this.onBack,
   });
 
   @override
@@ -38,6 +41,13 @@ class _ExpertDetailPageState extends State<ExpertDetailPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: '返回专家池',
+                onPressed: widget.onBack,
+              )
+            : null,
         title: Text(widget.title),
         actions: [
           IconButton(

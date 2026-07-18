@@ -48,6 +48,40 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _deleteProject(ProjectEntry entry) async {
+    final theme = Theme.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除项目'),
+        content: Text('确定删除项目「${entry.name}」？\n'
+            '该操作只从 Crew 列表中移除，不会删除磁盘上的项目文件。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.store.remove(entry.path);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除项目「${entry.name}」')),
+    );
+    setState(() {
+      _future = widget.store.load();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -92,6 +126,7 @@ class _HomePageState extends State<HomePage> {
                     onPublish: widget.expertPoolService != null
                         ? () => _onPublish(e)
                         : null,
+                    onDelete: () => _deleteProject(e),
                   );
                 },
               );
@@ -161,10 +196,12 @@ class _ProjectCard extends StatelessWidget {
   final ProjectEntry entry;
   final VoidCallback onOpen;
   final VoidCallback? onPublish;
+  final VoidCallback onDelete;
   const _ProjectCard({
     required this.entry,
     required this.onOpen,
     this.onPublish,
+    required this.onDelete,
   });
 
   @override
@@ -176,7 +213,7 @@ class _ProjectCard extends StatelessWidget {
         onTap: onOpen,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
           child: Row(
             children: [
               Container(
@@ -248,6 +285,12 @@ class _ProjectCard extends StatelessWidget {
                   tooltip: '提炼专家',
                   onPressed: onPublish,
                 ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                tooltip: '删除',
+                color: theme.colorScheme.error,
+                onPressed: onDelete,
+              ),
               const SizedBox(width: 2),
               Icon(
                 Icons.chevron_right_rounded,

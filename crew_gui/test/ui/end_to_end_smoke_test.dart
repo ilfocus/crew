@@ -14,8 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('new project happy path generates a workspace', (tester) async {
-    // Stepper 的 6 个步骤头部 + 当前步内容会超出默认 800x600 视口,
-    // 导致"下一步"按钮落在屏幕外。设大视口让控件可点击。
+    // 表单内容较长，设大视口以便底部按钮可点击。
     tester.view.physicalSize = const Size(1200, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -30,7 +29,7 @@ void main() {
     final templates = TemplateRepository(File('${tmp.path}/custom.json'));
     await templates.loadCustom();
 
-    // picker 依次返回：ios 目录（目录步）→ 生成位置（预览步）
+    // picker 依次返回：ios 目录（目录步）→ 生成位置（项目信息）
     final pickQueue = <String?>[iosDir.path, wsParent.path];
     final picker = FakeDirectoryPicker(null);
 
@@ -51,46 +50,48 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // 进入向导
+    // 进入新建项目
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
 
-    // 目录步：添加 ios 目录
-    picker.next = pickQueue[0];
-    await tester.tap(find.text('添加目录'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('下一步'));
-    await tester.pumpAndSettle();
-
-    // 专家步：选 ios-dev
-    await tester.tap(find.text('iOS 开发工程师'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('下一步'));
-    await tester.pumpAndSettle();
-
-    // 关联步：自动分配
-    await tester.tap(find.text('自动分配'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('下一步'));
-    await tester.pumpAndSettle();
-
-    // 目标步：默认 claude+codex，直接下一步
-    await tester.tap(find.text('下一步'));
-    await tester.pumpAndSettle();
-
-    // 预览步：填名、选位置、生成预览、确认（下一步）
-    await tester.enterText(find.byType(TextField).first, 'apm');
+    // 项目信息：项目名 + 生成位置
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.labelText == '项目名 *',
+      ),
+      'apm',
+    );
     picker.next = pickQueue[1];
     await tester.tap(find.text('选择位置'));
     await tester.pumpAndSettle();
+
+    // 代码目录：添加 ios 目录
+    picker.next = pickQueue[0];
+    await tester.tap(find.text('添加目录'));
+    await tester.pumpAndSettle();
+
+    // 专家：选 ios-dev
+    await tester.tap(find.text('iOS 开发工程师'));
+    await tester.pumpAndSettle();
+
+    // 关联：自动分配
+    await tester.tap(find.text('自动分配'));
+    await tester.pumpAndSettle();
+
+    // 底部按钮：先生成预览
     await tester.tap(find.text('生成预览'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('下一步'));
+
+    // 再确认生成
+    await tester.tap(find.text('确认生成'));
     await tester.pumpAndSettle();
 
     final wsRoot = '${wsParent.path}/apm';
     expect(File('$wsRoot/.claude/agents/ios.md').existsSync(), isTrue);
     expect(File('$wsRoot/crew.yaml').existsSync(), isTrue);
     expect((await store.load()).any((e) => e.name == 'apm'), isTrue);
+
+    // 完成态：可看到「打开文件夹」按钮
+    expect(find.textContaining('生成完成'), findsOneWidget);
   });
 }

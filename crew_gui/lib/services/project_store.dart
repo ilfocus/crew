@@ -32,4 +32,13 @@ class ProjectStore {
     list.insert(0, e);
     await save(list);
   }
+
+  /// Removes the entry whose [path] matches. No-op if absent.
+  Future<void> remove(String path) async {
+    final list = await load();
+    final before = list.length;
+    list.removeWhere((x) => x.path == path);
+    if (list.length == before) return;
+    await save(list);
+  }
 }

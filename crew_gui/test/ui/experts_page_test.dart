@@ -181,4 +181,50 @@ void main() {
       original.principles.join(', '),
     );
   });
+
+  testWidgets('builtin experts do not show delete button in list',
+      (tester) async {
+    final repo = _newRepo();
+    await tester.pumpWidget(CrewApp(
+      home: ExpertsPage(templates: repo),
+    ));
+    await tester.pumpAndSettle();
+    // 内置模板列表中不应出现删除按钮
+    expect(find.byTooltip('删除'), findsNothing);
+  });
+
+  testWidgets('custom experts show delete button and delete removes from list',
+      (tester) async {
+    final repo = _newRepo();
+    // 直接添加一个自定义模板
+    await repo.addCustom(const AgentTemplate(
+      id: 'rust-dev',
+      version: 1,
+      defaultName: 'rust',
+      displayName: '小R',
+      role: 'Rust 工程师',
+      probePrompt: '',
+      matchGlobs: [],
+    ));
+
+    await tester.pumpWidget(CrewApp(
+      home: ExpertsPage(templates: repo),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('小R（Rust 工程师）'), findsOneWidget);
+    // 仅自定义专家有删除按钮
+    expect(find.byTooltip('删除'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除专家'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    // 自定义专家已被移除，回到只剩内置专家（无删除按钮）
+    expect(find.text('小R（Rust 工程师）'), findsNothing);
+    expect(find.byTooltip('删除'), findsNothing);
+  });
 }

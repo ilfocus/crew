@@ -33,4 +33,31 @@ void main() {
     expect(list.first.path, '/ws/apm');
     expect(list.first.name, 'apm2');
   });
+
+  test('remove deletes entry by path', () async {
+    await store.add(const ProjectEntry(
+      name: 'apm', path: '/ws/apm', createdAt: '2026-07-13',
+      repoCount: 2, agentCount: 3));
+    await store.add(const ProjectEntry(
+      name: 'web', path: '/ws/web', createdAt: '2026-07-13',
+      repoCount: 1, agentCount: 1));
+
+    await store.remove('/ws/apm');
+
+    final list = await store.load();
+    expect(list.length, 1);
+    expect(list.first.path, '/ws/web');
+  });
+
+  test('remove is a no-op when path absent', () async {
+    await store.add(const ProjectEntry(
+      name: 'apm', path: '/ws/apm', createdAt: '2026-07-13',
+      repoCount: 2, agentCount: 3));
+
+    await store.remove('/ws/not-there');
+
+    final list = await store.load();
+    expect(list.length, 1);
+    expect(list.first.path, '/ws/apm');
+  });
 }

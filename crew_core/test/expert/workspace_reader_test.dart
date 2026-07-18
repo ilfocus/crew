@@ -211,4 +211,116 @@ void main() {
       expect(pm.memory.index, '');
     });
   });
+
+  // ---- Legacy 兜底：早期工作区没有 .crew/specs/，仅有 .claude/agents 或 .codex/agents ----
+  group('legacy fallback (no .crew/specs/)', () {
+    Directory _legacyWorkspace() {
+      final root = Directory.systemTemp.createTempSync('ws_legacy');
+      // .claude/agents/*.md（backend, frontend）
+      File('${root.path}/.claude/agents/backend.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# backend agent');
+      File('${root.path}/.claude/agents/frontend.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# frontend agent');
+      // .codex/agents/pm.toml（只在 codex 里出现）
+      File('${root.path}/.codex/agents/pm.toml')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# pm');
+      // memory/backend/MEMORY.md
+      File('${root.path}/memory/backend/MEMORY.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# Backend Memory');
+      // memory/backend/solved/issue1.md
+      File('${root.path}/memory/backend/solved/issue1.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('fix 1');
+      return root;
+    }
+
+    test('readAgents derives names from .claude/agents + .codex/agents', () async {
+      final root = _legacyWorkspace();
+      addTearDown(() => root.deleteSync(recursive: true));
+
+      final reader = WorkspaceReader(root);
+      final agents = await reader.readAgents();
+
+      final names = agents.map((a) => a.spec.name).toList();
+      expect(names, ['backend', 'frontend', 'pm']); // 排序后稳定
+    });
+
+    test('legacy agent has minimal spec + memory from memory/<name>/', () async {
+      final root = _legacyWorkspace();
+      addTearDown(() => root.deleteSync(recursive: true));
+
+      final reader = WorkspaceReader(root);
+      final agents = await reader.readAgents();
+      final backend = agents.firstWhere((a) => a.spec.name == 'backend');
+
+      // spec 仅 name/displayName 有值，其余为默认空
+      expect(backend.spec.name, 'backend');
+      expect(backend.spec.displayName, 'backend');
+      expect(backend.spec.role, '');
+      expect(backend.spec.repos, isEmpty);
+      expect(backend.spec.keyFiles, isEmpty);
+      // memory 仍能读回
+      expect(backend.memory.index, '# Backend Memory');
+      expect(backend.memory.solved.length, 1);
+      expect(backend.memory.solved.first.path, 'issue1.md');
+      expect(backend.memory.solved.first.content, 'fix 1');
+      expect(backend.memory.projects, isEmpty);
+    });
+
+    test('readAgent returns minimal agent when claude file exists', () async {
+      final root = _legacyWorkspace();
+      addTearDown(() => root.deleteSync(recursive: true));
+
+      final reader = WorkspaceReader(root);
+      final pm = await reader.readAgent('pm');
+
+      expect(pm, isNotNull);
+      expect(pm!.spec.name, 'pm');
+      expect(pm.spec.displayName, 'pm');
+      expect(pm.memory.index, ''); // pm 没有 memory 目录
+    });
+
+    test('readAgent returns null when no evidence of agent', () async {
+      final root = _legacyWorkspace();
+      addTearDown(() => root.deleteSync(recursive: true));
+
+      final reader = WorkspaceReader(root);
+      final ghost = await reader.readAgent('nonexistent');
+      expect(ghost, isNull);
+    });
+
+    test('.crew/specs/ takes precedence over legacy fallback', () async {
+      final root = _legacyWorkspace();
+      addTearDown(() => root.deleteSync(recursive: true));
+      // 补一个 backend 的 spec JSON（带真实 role）
+      final specFile = File('${root.path}/.crew/specs/backend.json');
+      specFile.parent.createSync(recursive: true);
+      specFile.writeAsStringSync(jsonEncode(const AgentSpec(
+        name: 'backend',
+        displayName: '小后端',
+        repos: [],
+        role: '后端工程师',
+        coordinates: '',
+        moduleStructure: '',
+        keyFiles: [],
+        dataflow: '',
+        memoryConvention: '',
+        conventions: [],
+      ).toJson()));
+
+      final reader = WorkspaceReader(root);
+      final agents = await reader.readAgents();
+      final backend = agents.firstWhere((a) => a.spec.name == 'backend');
+      // 用了 spec JSON，role 来自 JSON 而非空
+      expect(backend.spec.role, '后端工程师');
+      expect(backend.spec.displayName, '小后端');
+      // 但其它 agent（frontend/pm）仍走 legacy
+      final frontend = agents.firstWhere((a) => a.spec.name == 'frontend');
+      expect(frontend.spec.role, '');
+    });
+  });
 }

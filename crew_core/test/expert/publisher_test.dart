@@ -31,9 +31,9 @@ ExpertMemory _fullMemory() => const ExpertMemory(
 
 void main() {
   group('publishProject — full retention', () {
-    test('produces complete spec + memory; projectId from URL; github in meta',
-        () {
-      final expert = publishProject(
+    test('produces AgentCore + ProjectCompetence; projectId from URL', () {
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'full',
@@ -43,54 +43,38 @@ void main() {
         version: 3,
       );
 
-      expect(expert, isNotNull);
-      expect(expert!.kind, ExpertKind.project);
+      expect(out, isNotNull);
+      // core
+      expect(out!.core.id, 'ios-lin');
+      expect(out.core.name, 'ios');
+      expect(out.core.displayName, '小i');
+      expect(out.core.role, 'iOS 开发工程师');
+      expect(out.core.personality, '严谨');
+      expect(out.core.principles, ['不引入未测试依赖']);
 
-      // spec preserved entirely
-      expect(expert.spec.name, 'ios');
-      expect(expert.spec.repos, ['~/bm_app/ios']);
-      expect(expert.spec.coordinates, '路径 ~/bm_app/ios');
-      expect(expert.spec.keyFiles.length, 1);
-      expect(expert.spec.keyFiles.first.path, 'Core/BMApm.swift:279');
-      expect(expert.spec.personality, '严谨');
-      expect(expert.spec.techStack, ['Swift', 'SwiftUI']);
-      expect(expert.spec.difficulties, ['线程安全']);
+      // project
+      expect(out.project.projectId, 'github.com/foo/bar');
+      expect(out.project.repos, ['~/bm_app/ios']);
+      expect(out.project.coordinates, '路径 ~/bm_app/ios');
+      expect(out.project.keyFiles.length, 1);
+      expect(out.project.keyFiles.first.path, 'Core/BMApm.swift:279');
+      expect(out.project.techStack, ['Swift', 'SwiftUI']);
+      expect(out.project.sdks, ['SensorsSDK']);
+      expect(out.project.difficulties, ['线程安全']);
+      expect(out.project.github, 'https://github.com/foo/bar.git');
+      expect(out.project.source, 'opensource');
+      expect(out.project.retention, 'full');
 
-      // memory preserved entirely
-      expect(expert.memory.index, '# MEMORY');
-      expect(expert.memory.notes, 'L1 notes with /Users/bm/app/ios path');
-      expect(expert.memory.solved.length, 1);
-      expect(expert.memory.solved.first.path, 'solved/x.md');
-      expect(expert.memory.playbooks.length, 1);
-
-      // meta
-      expect(expert.meta.retention, 'full');
-      expect(expert.meta.source, 'opensource');
-      expect(expert.meta.github, 'https://github.com/foo/bar.git');
-      expect(expert.meta.version, 3);
-      expect(expert.meta.projectId, 'github.com/foo/bar');
+      // L1 memory preserved
+      expect(out.project.notes, 'L1 notes with /Users/bm/app/ios path');
+      expect(out.project.solved.length, 1);
+      expect(out.project.solved.first.path, 'solved/x.md');
+      expect(out.project.playbooks.length, 1);
     });
 
-    test('projectId matches deriveProjectId result', () {
-      final expert = publishProject(
-        spec: _fullSpec(),
-        workspaceMemory: _fullMemory(),
-        retention: 'full',
-        source: 'opensource',
-        gitRemoteUrl: 'git@github.com:Foo/Bar.git',
-        workspacePath: '/workspace/ios',
-        version: 1,
-      );
-      final expected = deriveProjectId(
-        gitRemoteUrl: 'git@github.com:Foo/Bar.git',
-        path: '/workspace/ios',
-      );
-      expect(expert!.meta.projectId, expected);
-      expect(expert.meta.projectId, 'github.com/foo/bar');
-    });
-
-    test('private source leaves meta.github empty', () {
-      final expert = publishProject(
+    test('private source leaves project.github empty', () {
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'full',
@@ -99,14 +83,16 @@ void main() {
         workspacePath: '/workspace/ios',
         version: 1,
       );
-      expect(expert!.meta.source, 'private');
-      expect(expert.meta.github, '');
-      // projectId still derived from URL since it was passed
-      expect(expert.meta.projectId, 'github.com/foo/bar');
+      expect(out, isNotNull);
+      expect(out!.project.source, 'private');
+      expect(out.project.github, '');
+      // projectId still derived from URL
+      expect(out.project.projectId, 'github.com/foo/bar');
     });
 
     test('falls back to path hash when no gitRemoteUrl', () {
-      final expert = publishProject(
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'full',
@@ -114,15 +100,61 @@ void main() {
         workspacePath: '/Users/qiwang/project/crew',
         version: 1,
       );
-      expect(expert!.meta.projectId.length, 8);
-      expect(RegExp(r'^[0-9a-f]{8}$').hasMatch(expert.meta.projectId), isTrue);
+      expect(out, isNotNull);
+      expect(out!.project.projectId.length, 8);
+      expect(RegExp(r'^[0-9a-f]{8}$').hasMatch(out.project.projectId), isTrue);
+    });
+
+    test('core.id equals agentId (individual, not role)', () {
+      final out = publishProject(
+        agentId: 'ios-lin',
+        spec: _fullSpec(),
+        workspaceMemory: _fullMemory(),
+        retention: 'full',
+        source: 'opensource',
+        gitRemoteUrl: 'https://github.com/foo/bar',
+        workspacePath: '/workspace/ios',
+        version: 1,
+      );
+      expect(out, isNotNull);
+      expect(out!.core.id, 'ios-lin');
+      // role ≠ id (multiple agents can share role)
+      expect(out.core.role, 'iOS 开发工程师');
+      expect(out.core.id, isNot(out.core.role));
+    });
+
+    test('mapping divides fields correctly: personality→core, keyFiles→project',
+        () {
+      final out = publishProject(
+        agentId: 'ios-lin',
+        spec: _fullSpec(),
+        workspaceMemory: _fullMemory(),
+        retention: 'full',
+        source: 'opensource',
+        gitRemoteUrl: 'https://github.com/foo/bar',
+        workspacePath: '/workspace/ios',
+        version: 1,
+      );
+      expect(out, isNotNull);
+
+      // personality/principles 落 core，不在 project
+      expect(out!.core.personality, '严谨');
+      expect(out.core.principles, ['不引入未测试依赖']);
+
+      // keyFiles/coordinates/repos 落 project，不在 core
+      expect(out.project.keyFiles.length, 1);
+      expect(out.project.coordinates, '路径 ~/bm_app/ios');
+      expect(out.project.repos, ['~/bm_app/ios']);
+      // core 里没有这些字段
+      expect(out.core.toJson().containsKey('keyFiles'), isFalse);
+      expect(out.core.toJson().containsKey('coordinates'), isFalse);
     });
   });
 
   group('publishProject — experience-only retention', () {
-    test('clears keyFiles/coordinates/solved but preserves transferable fields',
-        () {
-      final expert = publishProject(
+    test('clears keyFiles/coordinates/repos/solved; preserves transferable', () {
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'experience-only',
@@ -132,32 +164,36 @@ void main() {
         version: 2,
       );
 
-      expect(expert, isNotNull);
-      expect(expert!.meta.retention, 'experience-only');
+      expect(out, isNotNull);
+      expect(out!.project.retention, 'experience-only');
 
-      // L1 specifics cleared
-      expect(expert.spec.keyFiles, isEmpty);
-      expect(expert.spec.coordinates, '');
-      expect(expert.spec.repos, isEmpty);
-      expect(expert.memory.solved, isEmpty);
+      // L1 specifics cleared in project
+      expect(out.project.keyFiles, isEmpty);
+      expect(out.project.coordinates, '');
+      expect(out.project.repos, isEmpty);
+      expect(out.project.solved, isEmpty);
 
-      // Transferable fields preserved
-      expect(expert.spec.personality, '严谨');
-      expect(expert.spec.principles, ['不引入未测试依赖']);
-      expect(expert.spec.techStack, ['Swift', 'SwiftUI']);
-      expect(expert.spec.sdks, ['SensorsSDK']);
-      expect(expert.spec.difficulties, ['线程安全']);
+      // core 的 personality/principles 仍保留（可迁移）
+      expect(out.core.personality, '严谨');
+      expect(out.core.principles, ['不引入未测试依赖']);
 
-      // Playbooks (already abstract) preserved
-      expect(expert.memory.playbooks.length, 1);
-      expect(expert.memory.playbooks.first.path, 'playbooks/y.md');
+      // project 的可迁移字段保留
+      expect(out.project.techStack, ['Swift', 'SwiftUI']);
+      expect(out.project.sdks, ['SensorsSDK']);
+      expect(out.project.difficulties, ['线程安全']);
 
-      // notes redacted for experience-only
-      expect(expert.memory.notes, 'L1 notes with ‹path› path');
+      // playbooks 保留但 content 路径脱敏
+      expect(out.project.playbooks.length, 1);
+      expect(out.project.playbooks.first.path, 'playbooks/y.md');
+
+      // notes 路径脱敏
+      expect(out.project.notes.contains('/Users/bm/app/ios'), isFalse);
+      expect(out.project.notes.contains('‹path›'), isTrue);
     });
 
     test('redacts paths in notes and playbooks for experience-only', () {
-      final expert = publishProject(
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'experience-only',
@@ -167,43 +203,19 @@ void main() {
         version: 2,
       );
 
-      expect(expert, isNotNull);
-
-      // notes: /Users/bm/app/ios should be redacted
-      expect(expert!.memory.notes.contains('/Users/bm/app/ios'), isFalse);
-      expect(expert.memory.notes.contains('‹path›'), isTrue);
-
-      // playbooks: foo/bar.dart:12 should be redacted
-      expect(expert.memory.playbooks.length, 1);
-      expect(
-          expert.memory.playbooks.first.content.contains('foo/bar.dart:12'),
+      expect(out, isNotNull);
+      expect(out!.project.notes.contains('/Users/bm/app/ios'), isFalse);
+      expect(out.project.notes.contains('‹path›'), isTrue);
+      expect(out.project.playbooks.first.content.contains('foo/bar.dart:12'),
           isFalse);
-      expect(expert.memory.playbooks.first.content.contains('‹path›'), isTrue);
-      // playbook path (filename) preserved
-      expect(expert.memory.playbooks.first.path, 'playbooks/y.md');
-    });
-
-    test('full retention preserves paths in notes and playbooks', () {
-      final expert = publishProject(
-        spec: _fullSpec(),
-        workspaceMemory: _fullMemory(),
-        retention: 'full',
-        source: 'private',
-        workspacePath: '/workspace/ios',
-        version: 1,
-      );
-
-      expect(expert, isNotNull);
-      // full retention — no redaction
-      expect(expert!.memory.notes.contains('/Users/bm/app/ios'), isTrue);
-      expect(expert.memory.playbooks.first.content.contains('foo/bar.dart:12'),
-          isTrue);
+      expect(out.project.playbooks.first.content.contains('‹path›'), isTrue);
     });
   });
 
   group('publishProject — none retention', () {
     test('returns null', () {
-      final expert = publishProject(
+      final out = publishProject(
+        agentId: 'ios-lin',
         spec: _fullSpec(),
         workspaceMemory: _fullMemory(),
         retention: 'none',
@@ -212,7 +224,25 @@ void main() {
         workspacePath: '/workspace/ios',
         version: 1,
       );
-      expect(expert, isNull);
+      expect(out, isNull);
+    });
+  });
+
+  group('publishProject — domains inverse index', () {
+    test('new project starts with empty domains list', () {
+      final out = publishProject(
+        agentId: 'ios-lin',
+        spec: _fullSpec(),
+        workspaceMemory: _fullMemory(),
+        retention: 'full',
+        source: 'opensource',
+        gitRemoteUrl: 'https://github.com/foo/bar',
+        workspacePath: '/workspace/ios',
+        version: 1,
+      );
+      // 新发布的 project.domains 是空——由后续 mergeIntoDomain 时填
+      expect(out, isNotNull);
+      expect(out!.project.domains, isEmpty);
     });
   });
 }

@@ -7,7 +7,14 @@ import 'expert_detail_page.dart';
 
 class ExpertPoolPage extends StatefulWidget {
   final ExpertPoolService service;
-  const ExpertPoolPage({super.key, required this.service});
+  /// 点击项目专家卡片时触发；由父级在内容区域内渲染详情页以保留左侧菜单。
+  /// 为 null 时回退到 Navigator.push（全屏覆盖左侧菜单）。
+  final void Function(ExpertSummary summary, Directory expertDir)? onOpenExpert;
+  const ExpertPoolPage({
+    super.key,
+    required this.service,
+    this.onOpenExpert,
+  });
 
   @override
   State<ExpertPoolPage> createState() => _ExpertPoolPageState();
@@ -36,6 +43,63 @@ class _ExpertPoolPageState extends State<ExpertPoolPage> {
         domain: domain,
       ),
     ).then((_) => _refresh());
+  }
+
+  Future<void> _deleteDomain(ExpertSummary domain) async {
+    final ok = await _confirmDelete(
+      title: '删除领域专家',
+      message: '确定删除领域专家「${domain.displayName}」？\n'
+          '该 domain 下所有专家文件将被永久移除。',
+    );
+    if (ok != true) return;
+    await widget.service.deleteDomain(domain.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除领域专家「${domain.displayName}」')),
+    );
+    _refresh();
+  }
+
+  Future<void> _deleteProjectExpert(ExpertSummary expert) async {
+    final ok = await _confirmDelete(
+      title: '删除项目专家',
+      message: '确定删除项目专家「${expert.displayName}」？\n'
+          '该项目的专家文件将被永久移除。',
+    );
+    if (ok != true) return;
+    await widget.service.deleteProject(expert.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除项目专家「${expert.displayName}」')),
+    );
+    _refresh();
+  }
+
+  Future<bool?> _confirmDelete({
+    required String title,
+    required String message,
+  }) {
+    final theme = Theme.of(context);
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -78,6 +142,7 @@ class _ExpertPoolPageState extends State<ExpertPoolPage> {
                       _DomainCard(
                         summary: d,
                         onApply: () => _showApplyDialog(d),
+                        onDelete: () => _deleteDomain(d),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -90,6 +155,8 @@ class _ExpertPoolPageState extends State<ExpertPoolPage> {
                       _ProjectExpertCard(
                         summary: p,
                         poolRoot: widget.service.pool.root.path,
+                        onOpenExpert: widget.onOpenExpert,
+                        onDelete: () => _deleteProjectExpert(p),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -166,14 +233,19 @@ class _GroupLabel extends StatelessWidget {
 class _DomainCard extends StatelessWidget {
   final ExpertSummary summary;
   final VoidCallback onApply;
-  const _DomainCard({required this.summary, required this.onApply});
+  final VoidCallback onDelete;
+  const _DomainCard({
+    required this.summary,
+    required this.onApply,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
         child: Row(
           children: [
             Container(
@@ -215,6 +287,12 @@ class _DomainCard extends StatelessWidget {
               onPressed: onApply,
               child: const Text('应用到目录'),
             ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded, size: 20),
+              tooltip: '删除',
+              color: theme.colorScheme.error,
+              onPressed: onDelete,
+            ),
           ],
         ),
       ),
@@ -225,7 +303,15 @@ class _DomainCard extends StatelessWidget {
 class _ProjectExpertCard extends StatelessWidget {
   final ExpertSummary summary;
   final String poolRoot;
-  const _ProjectExpertCard({required this.summary, required this.poolRoot});
+  final void Function(ExpertSummary summary, Directory expertDir)?
+      onOpenExpert;
+  final VoidCallback onDelete;
+  const _ProjectExpertCard({
+    required this.summary,
+    required this.poolRoot,
+    this.onOpenExpert,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +321,7 @@ class _ProjectExpertCard extends StatelessWidget {
         onTap: () => _openDetail(context),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
           child: Row(
             children: [
               Container(
@@ -274,6 +360,12 @@ class _ProjectExpertCard extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                tooltip: '删除',
+                color: theme.colorScheme.error,
+                onPressed: onDelete,
+              ),
               Icon(
                 Icons.chevron_right_rounded,
                 color: theme.colorScheme.onSurfaceVariant,
@@ -289,6 +381,10 @@ class _ProjectExpertCard extends StatelessWidget {
   void _openDetail(BuildContext context) {
     // projectId 可能含斜杠（如 github.com/foo/bar），对应 experts/projects/<projectId>/
     final dir = Directory('$poolRoot/projects/${summary.id}');
+    if (onOpenExpert != null) {
+      onOpenExpert!(summary, dir);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ExpertDetailPage(

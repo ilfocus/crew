@@ -39,6 +39,13 @@ class ExpertPoolService {
 
   Future<List<ExpertSummary>> list() => pool.list();
 
+  /// Recursively removes `projects/<projectId>/` from the pool. No-op if absent.
+  Future<void> deleteProject(String projectId) =>
+      pool.deleteProject(projectId);
+
+  /// Recursively removes `domains/<domain>/` from the pool. No-op if absent.
+  Future<void> deleteDomain(String domain) => pool.deleteDomain(domain);
+
   Future<PublishOutcome> publish({
     required String workspacePath,
     required String agentName,

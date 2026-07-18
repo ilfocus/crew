@@ -12,10 +12,21 @@ typedef AiRefineCallback = Future<String> Function({
   required String instruction,
 });
 
+/// 打开编辑器回调：传入模板、是否内置、是否新建。
+/// 由父级在内容区域内渲染编辑页以保留左侧菜单；为 null 时回退到 Navigator.push。
+typedef OpenEditorCallback = void Function(
+    AgentTemplate template, bool isBuiltinOriginal, bool isNew);
+
 class ExpertsPage extends StatefulWidget {
   final TemplateRepository templates;
   final AiRefineCallback? onAiRefine;
-  const ExpertsPage({super.key, required this.templates, this.onAiRefine});
+  final OpenEditorCallback? onOpenEditor;
+  const ExpertsPage({
+    super.key,
+    required this.templates,
+    this.onAiRefine,
+    this.onOpenEditor,
+  });
 
   @override
   State<ExpertsPage> createState() => _ExpertsPageState();
@@ -32,6 +43,10 @@ class _ExpertsPageState extends State<ExpertsPage> {
       ),
     );
     final isBuiltin = template != null && widget.templates.isBuiltin(template);
+    if (widget.onOpenEditor != null) {
+      widget.onOpenEditor!(t, isBuiltin, isNew);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ExpertEditPage(
@@ -43,6 +58,38 @@ class _ExpertsPageState extends State<ExpertsPage> {
           onChanged: _refresh,
         ),
       ),
+    );
+  }
+
+  Future<void> _deleteTemplate(AgentTemplate template) async {
+    final theme = Theme.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除专家'),
+        content: Text('确定删除自定义专家「${template.displayName}」？\n'
+            '该操作会移除其自定义覆盖，内置模板不受影响。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.templates.removeCustom(template.id);
+    _refresh();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已删除专家「${template.displayName}」')),
     );
   }
 
@@ -70,10 +117,12 @@ class _ExpertsPageState extends State<ExpertsPage> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final t = all[i];
+              final isBuiltin = widget.templates.isBuiltin(t);
               return _ExpertCard(
                 template: t,
-                isBuiltin: widget.templates.isBuiltin(t),
+                isBuiltin: isBuiltin,
                 onTap: () => _openEditor(t),
+                onDelete: isBuiltin ? null : () => _deleteTemplate(t),
               );
             },
           ),
@@ -87,10 +136,12 @@ class _ExpertCard extends StatelessWidget {
   final AgentTemplate template;
   final bool isBuiltin;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
   const _ExpertCard({
     required this.template,
     required this.isBuiltin,
     required this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -104,7 +155,7 @@ class _ExpertCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
           child: Row(
             children: [
               Container(
@@ -168,6 +219,13 @@ class _ExpertCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onDelete != null)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                  tooltip: '删除',
+                  color: theme.colorScheme.error,
+                  onPressed: onDelete,
+                ),
               Icon(
                 Icons.chevron_right_rounded,
                 color: theme.colorScheme.onSurfaceVariant,
@@ -216,6 +274,8 @@ class ExpertEditPage extends StatefulWidget {
   final bool isNew;
   final AiRefineCallback? onAiRefine;
   final VoidCallback onChanged;
+  /// 返回专家列表的回调；为 null 时回退到 Navigator.pop。
+  final VoidCallback? onBack;
 
   const ExpertEditPage({
     super.key,
@@ -225,6 +285,7 @@ class ExpertEditPage extends StatefulWidget {
     required this.isNew,
     this.onAiRefine,
     required this.onChanged,
+    this.onBack,
   });
 
   @override
@@ -296,7 +357,16 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
     final t = _buildFromForm();
     await widget.repository.updateCustom(t);
     widget.onChanged();
-    if (mounted) Navigator.of(context).pop();
+    _close();
+  }
+
+  /// 关闭编辑页：有 onBack 时调用它（内容区渲染模式），否则 Navigator.pop。
+  void _close() {
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   /// 弹出预览面板：显示用当前表单值渲染的 md 文件清单与内容。
@@ -347,7 +417,7 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
   Future<void> _delete() async {
     await widget.repository.removeCustom(widget.initial.id);
     widget.onChanged();
-    if (mounted) Navigator.of(context).pop();
+    _close();
   }
 
   Future<void> _aiRefine() async {
@@ -430,6 +500,13 @@ class _ExpertEditPageState extends State<ExpertEditPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack != null
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: '返回专家列表',
+                onPressed: widget.onBack,
+              )
+            : null,
         title: Text(widget.isNew ? '新建专家' : '编辑专家'),
         actions: [
           if (widget.onAiRefine != null)

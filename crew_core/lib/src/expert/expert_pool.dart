@@ -55,6 +55,23 @@ class ExpertPool {
     return _load(f);
   }
 
+  /// Recursively removes `root/projects/<projectId>/`. No-op if absent.
+  Future<void> deleteProject(String projectId) async {
+    await _delete(p.join(root.path, 'projects', projectId));
+  }
+
+  /// Recursively removes `root/domains/<domain>/`. No-op if absent.
+  Future<void> deleteDomain(String domain) async {
+    await _delete(p.join(root.path, 'domains', domain));
+  }
+
+  Future<void> _delete(String path) async {
+    final dir = Directory(path);
+    if (dir.existsSync()) {
+      await dir.delete(recursive: true);
+    }
+  }
+
   Future<Expert?> _load(File f) async {
     if (!f.existsSync()) return null;
     return _parse(f);

@@ -259,4 +259,76 @@ void main() {
       expect(await pool.loadDomain('no-such-domain'), isNull);
     });
   });
+
+  group('deleteProject / deleteDomain', () {
+    test('deleteProject removes project directory and its files', () async {
+      final expert = Expert(
+        kind: ExpertKind.project,
+        spec: spec('ios'),
+        memory: const ExpertMemory(index: 'idx'),
+        meta: const ExpertMeta(projectId: 'github.com/foo/bar'),
+      );
+      await pool.saveProject(expert);
+      final dir =
+          Directory('${root.path}/projects/github.com/foo/bar');
+      expect(dir.existsSync(), isTrue);
+      expect(File('${dir.path}/expert.json').existsSync(), isTrue);
+
+      await pool.deleteProject('github.com/foo/bar');
+
+      expect(dir.existsSync(), isFalse);
+      expect(await pool.loadProject('github.com/foo/bar'), isNull);
+    });
+
+    test('deleteDomain removes domain directory and its files', () async {
+      final expert = Expert(
+        kind: ExpertKind.domain,
+        domain: 'ios',
+        spec: spec('ios-domain'),
+        memory: const ExpertMemory(notes: 'L2'),
+        meta: const ExpertMeta(),
+      );
+      await pool.saveDomain(expert);
+      final dir = Directory('${root.path}/domains/ios');
+      expect(dir.existsSync(), isTrue);
+
+      await pool.deleteDomain('ios');
+
+      expect(dir.existsSync(), isFalse);
+      expect(await pool.loadDomain('ios'), isNull);
+    });
+
+    test('deleteProject is a no-op when absent', () async {
+      await pool.deleteProject('github.com/no/such');
+      expect(await pool.loadProject('github.com/no/such'), isNull);
+    });
+
+    test('deleteDomain is a no-op when absent', () async {
+      await pool.deleteDomain('no-such-domain');
+      expect(await pool.loadDomain('no-such-domain'), isNull);
+    });
+
+    test('deleteProject does not affect domains and vice versa', () async {
+      final proj = Expert(
+        kind: ExpertKind.project,
+        spec: spec('ios'),
+        memory: const ExpertMemory(),
+        meta: const ExpertMeta(projectId: 'github.com/foo/bar'),
+      );
+      final dom = Expert(
+        kind: ExpertKind.domain,
+        domain: 'ios',
+        spec: spec('ios-domain'),
+        memory: const ExpertMemory(),
+        meta: const ExpertMeta(),
+      );
+      await pool.saveProject(proj);
+      await pool.saveDomain(dom);
+
+      await pool.deleteProject('github.com/foo/bar');
+
+      expect(await pool.loadDomain('ios'), isNotNull);
+      expect(await pool.loadProject('github.com/foo/bar'), isNull);
+    });
+  });
 }

@@ -20,8 +20,21 @@ class _FakeExpertPoolService extends ExpertPoolService {
   String? lastUseAgent;
   List<String>? lastUseRepos;
 
+  String? lastDeleteProjectId;
+  String? lastDeleteDomain;
+
   @override
   Future<List<ExpertSummary>> list() async => seedList;
+
+  @override
+  Future<void> deleteProject(String projectId) async {
+    lastDeleteProjectId = projectId;
+  }
+
+  @override
+  Future<void> deleteDomain(String domain) async {
+    lastDeleteDomain = domain;
+  }
 
   @override
   Future<PublishOutcome> publish({
@@ -144,5 +157,74 @@ void main() {
 
     // Success snackbar
     expect(find.textContaining('已应用'), findsOneWidget);
+  });
+
+  testWidgets('delete domain calls deleteDomain with correct id',
+      (tester) async {
+    service.seedList = const [
+      ExpertSummary(
+          kind: ExpertKind.domain,
+          id: 'quant',
+          displayName: '量化领域专家',
+          version: 1),
+    ];
+
+    await tester.pumpWidget(CrewApp(home: ExpertPoolPage(service: service)));
+    await tester.pumpAndSettle();
+
+    // Tap delete on the domain card
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+
+    // Confirm dialog
+    expect(find.text('删除领域专家'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(service.lastDeleteDomain, 'quant');
+    expect(find.textContaining('已删除'), findsOneWidget);
+  });
+
+  testWidgets('delete project expert calls deleteProject with correct id',
+      (tester) async {
+    service.seedList = const [
+      ExpertSummary(
+          kind: ExpertKind.project,
+          id: 'github.com/foo/bar',
+          displayName: '小i',
+          version: 2),
+    ];
+
+    await tester.pumpWidget(CrewApp(home: ExpertPoolPage(service: service)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除项目专家'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(service.lastDeleteProjectId, 'github.com/foo/bar');
+  });
+
+  testWidgets('cancel delete does not call service', (tester) async {
+    service.seedList = const [
+      ExpertSummary(
+          kind: ExpertKind.domain,
+          id: 'quant',
+          displayName: '量化领域专家',
+          version: 1),
+    ];
+
+    await tester.pumpWidget(CrewApp(home: ExpertPoolPage(service: service)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(service.lastDeleteDomain, isNull);
   });
 }
